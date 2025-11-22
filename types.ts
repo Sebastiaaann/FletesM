@@ -7,6 +7,11 @@ export interface QuoteResult {
   confidenceScore: number;
 }
 
+export interface VehicleLocation {
+  lat: number;
+  lng: number;
+}
+
 export interface Vehicle {
   id: string;
   plate: string;
@@ -15,6 +20,13 @@ export interface Vehicle {
   mileage: number;
   fuelLevel: number;
   nextService: string; // Date string
+  location?: VehicleLocation; // Optional location for map display
+}
+
+export interface MapFilter {
+  showActive: boolean;
+  showMaintenance: boolean;
+  showIdle: boolean;
 }
 
 export interface Driver {

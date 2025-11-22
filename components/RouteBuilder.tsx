@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import { generateSmartQuote } from '../services/geminiService';
-import { MapPin, Truck, DollarSign, Save, Calculator, Zap, AlertCircle, CheckCircle2, Loader2, PieChart, Fuel } from 'lucide-react';
+import { MapPin, Truck, DollarSign, Save, Calculator, Zap, AlertCircle, CheckCircle2, Loader2, PieChart, Fuel, FileText, Download } from 'lucide-react';
+import AddressAutocomplete from './AddressAutocomplete';
+import showToast from './Toast';
+import LoadingButton from './LoadingButton';
+import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '../utils/errorMessages';
 
 interface RouteFormData {
   origin: string;
@@ -54,6 +58,7 @@ const RouteBuilder: React.FC = () => {
   const [analysis, setAnalysis] = useState<RouteAnalysis | null>(null);
   const [aiInsight, setAiInsight] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [savedRoutes, setSavedRoutes] = useState<any[]>([]);
 
   const availableDrivers = ['Carlos Mendoza', 'Ana Silva', 'Jorge O\'Ryan', 'Luis Toro'];
@@ -65,12 +70,12 @@ const RouteBuilder: React.FC = () => {
 
   const calculateRoute = async () => {
     if (!formData.origin || !formData.destination || formData.distance === 0 || formData.clientQuote === 0) {
-      alert('Por favor completa todos los campos obligatorios');
+      showToast.warning(ERROR_MESSAGES.FORM_INCOMPLETE);
       return;
     }
 
     setLoading(true);
-    
+
     const fuelCost = formData.distance * formData.fuelCostPerKm;
     const totalCosts = fuelCost + formData.tollCosts + formData.driverWage + formData.insuranceCost + formData.maintenanceCost;
     const revenue = formData.clientQuote;
@@ -100,11 +105,11 @@ const RouteBuilder: React.FC = () => {
         formData.cargoDescription,
         `${formData.origin} a ${formData.destination}, ${formData.distance}km`
       );
-      
+
       setAiInsight(`Gemini AI sugiere: ${aiQuote.logisticsAdvice.join(' | ')}`);
       newAnalysis.aiRecommendations = aiQuote.logisticsAdvice;
       newAnalysis.riskScore = 100 - aiQuote.confidenceScore;
-      setAnalysis({...newAnalysis});
+      setAnalysis({ ...newAnalysis });
     } catch (error) {
       console.error('AI Analysis failed', error);
     }
@@ -112,18 +117,33 @@ const RouteBuilder: React.FC = () => {
     setLoading(false);
   };
 
-  const saveRoute = () => {
+  const saveRoute = async () => {
     if (!analysis) return;
-    
-    const newRoute = {
-      id: Date.now(),
-      ...formData,
-      ...analysis,
-      createdAt: new Date().toISOString(),
-    };
-    
-    setSavedRoutes([newRoute, ...savedRoutes]);
-    alert('✅ Ruta guardada exitosamente');
+
+    setIsSaving(true);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 800)); // Simulate API delay
+
+      const newRoute = {
+        id: Date.now(),
+        ...formData,
+        ...analysis,
+        createdAt: new Date().toISOString(),
+        isTemplate: false
+      };
+
+      setSavedRoutes([newRoute, ...savedRoutes]);
+      showToast.success(SUCCESS_MESSAGES.ROUTE_SAVED);
+    } catch (error) {
+      showToast.error(ERROR_MESSAGES.SAVE_ERROR);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const saveAsTemplate = async () => {
+    if (!formData.origin || !formData.destination) return;
+    showToast.success("Ruta guardada como plantilla frecuente");
   };
 
   const resetForm = () => {
@@ -149,7 +169,7 @@ const RouteBuilder: React.FC = () => {
   return (
     <div className="min-h-screen pt-24 px-4 sm:px-6 lg:px-8 pb-10 bg-dark-950 text-slate-200">
       <div className="max-w-7xl mx-auto animate-fade-in">
-        
+
         <div className="mb-10">
           <h2 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
             <MapPin className="w-8 h-8 text-brand-500" />
@@ -159,24 +179,32 @@ const RouteBuilder: React.FC = () => {
         </div>
 
         <div className="grid lg:grid-cols-3 gap-8">
-          
+
           <div className="lg:col-span-2 space-y-6">
-            
-            <div className="glass-panel border border-white/5 rounded-2xl p-6 animate-slide-up">
+
+            <div className="glass-panel border border-white/5 rounded-2xl p-4 md:p-6 animate-slide-up">
               <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
                 <MapPin className="w-5 h-5 text-brand-500" /> Detalles de Ruta
               </h3>
-              
-              <div className="grid md:grid-cols-2 gap-5">
-                <Input label="Origen *" value={formData.origin} onChange={(e) => handleInputChange('origin', e.target.value)} placeholder="Santiago Centro" />
-                <Input label="Destino *" value={formData.destination} onChange={(e) => handleInputChange('destination', e.target.value)} placeholder="Valparaíso Puerto" />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <AddressAutocomplete
+                  label="Origen *"
+                  value={formData.origin}
+                  onChange={(val) => handleInputChange('origin', val)}
+                />
+                <AddressAutocomplete
+                  label="Destino *"
+                  value={formData.destination}
+                  onChange={(val) => handleInputChange('destination', val)}
+                />
                 <Input label="Distancia (km) *" type="number" value={formData.distance} onChange={(e) => handleInputChange('distance', parseFloat(e.target.value) || 0)} placeholder="120" />
                 <Input label="Peso Carga (ton)" type="number" value={formData.cargoWeight} onChange={(e) => handleInputChange('cargoWeight', parseFloat(e.target.value) || 0)} placeholder="8.5" />
               </div>
-              
+
               <div className="mt-5">
                 <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Descripción de Carga</label>
-                <textarea 
+                <textarea
                   value={formData.cargoDescription}
                   onChange={(e) => handleInputChange('cargoDescription', e.target.value)}
                   className="w-full bg-dark-900 border border-white/10 rounded-xl p-4 text-white placeholder-slate-600 focus:ring-2 focus:ring-brand-500 outline-none resize-none h-24"
@@ -185,15 +213,15 @@ const RouteBuilder: React.FC = () => {
               </div>
             </div>
 
-            <div className="glass-panel border border-white/5 rounded-2xl p-6 animate-slide-up" style={{ animationDelay: '0.1s' }}>
+            <div className="glass-panel border border-white/5 rounded-2xl p-4 md:p-6 animate-slide-up" style={{ animationDelay: '0.1s' }}>
               <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
                 <Truck className="w-5 h-5 text-accent-500" /> Asignación de Recursos
               </h3>
-              
-              <div className="grid md:grid-cols-2 gap-5">
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
                   <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Conductor</label>
-                  <select 
+                  <select
                     value={formData.driver}
                     onChange={(e) => handleInputChange('driver', e.target.value)}
                     className="w-full bg-dark-900 border border-white/10 rounded-xl p-3 text-white focus:ring-2 focus:ring-brand-500 outline-none"
@@ -202,10 +230,10 @@ const RouteBuilder: React.FC = () => {
                     {availableDrivers.map(d => <option key={d} value={d}>{d}</option>)}
                   </select>
                 </div>
-                
+
                 <div>
                   <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Vehículo</label>
-                  <select 
+                  <select
                     value={formData.vehicle}
                     onChange={(e) => handleInputChange('vehicle', e.target.value)}
                     className="w-full bg-dark-900 border border-white/10 rounded-xl p-3 text-white focus:ring-2 focus:ring-brand-500 outline-none"
@@ -217,12 +245,12 @@ const RouteBuilder: React.FC = () => {
               </div>
             </div>
 
-            <div className="glass-panel border border-white/5 rounded-2xl p-6 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+            <div className="glass-panel border border-white/5 rounded-2xl p-4 md:p-6 animate-slide-up" style={{ animationDelay: '0.2s' }}>
               <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
                 <DollarSign className="w-5 h-5 text-green-500" /> Estructura de Costos
               </h3>
-              
-              <div className="grid md:grid-cols-2 gap-5">
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <Input label="Costo Combustible (CLP/km)" type="number" value={formData.fuelCostPerKm} onChange={(e) => handleInputChange('fuelCostPerKm', parseFloat(e.target.value) || 0)} />
                 <Input label="Peajes Totales (CLP)" type="number" value={formData.tollCosts} onChange={(e) => handleInputChange('tollCosts', parseFloat(e.target.value) || 0)} />
                 <Input label="Salario Conductor (CLP)" type="number" value={formData.driverWage} onChange={(e) => handleInputChange('driverWage', parseFloat(e.target.value) || 0)} />
@@ -232,8 +260,8 @@ const RouteBuilder: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex gap-4">
-              <button 
+            <div className="flex flex-col sm:flex-row gap-4">
+              <button
                 onClick={calculateRoute}
                 disabled={loading}
                 className="flex-1 bg-white text-black font-bold py-4 rounded-xl hover:bg-slate-200 transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(255,255,255,0.1)] disabled:opacity-50"
@@ -241,17 +269,30 @@ const RouteBuilder: React.FC = () => {
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Calculator className="w-5 h-5" />}
                 {loading ? 'Analizando...' : 'Calcular Rentabilidad'}
               </button>
-              
+
               {analysis && (
-                <button 
-                  onClick={saveRoute}
-                  className="px-6 bg-brand-600 text-white font-bold py-4 rounded-xl hover:bg-brand-500 transition-all flex items-center gap-2"
-                >
-                  <Save className="w-5 h-5" /> Guardar Ruta
-                </button>
+                <>
+                  <LoadingButton
+                    onClick={saveRoute}
+                    loading={isSaving}
+                    loadingText="Guardando..."
+                    icon={<Save className="w-5 h-5" />}
+                    className="px-6 bg-brand-600 text-white font-bold py-4 rounded-xl hover:bg-brand-500 transition-all flex items-center gap-2"
+                  >
+                    Guardar
+                  </LoadingButton>
+
+                  <button
+                    onClick={saveAsTemplate}
+                    className="px-4 bg-white/5 text-slate-300 font-bold py-4 rounded-xl hover:bg-white/10 transition-all flex items-center gap-2 border border-white/10"
+                    title="Guardar como plantilla"
+                  >
+                    <FileText className="w-5 h-5" />
+                  </button>
+                </>
               )}
-              
-              <button 
+
+              <button
                 onClick={resetForm}
                 className="px-6 bg-white/5 text-slate-400 font-medium py-4 rounded-xl hover:bg-white/10 transition-all border border-white/10"
               >
@@ -262,7 +303,7 @@ const RouteBuilder: React.FC = () => {
           </div>
 
           <div className="lg:col-span-1 space-y-6">
-            
+
             {!analysis && !loading && (
               <div className="glass-panel border border-white/5 rounded-2xl p-8 text-center h-[400px] flex flex-col items-center justify-center">
                 <PieChart className="w-16 h-16 text-slate-700 mb-4" />
@@ -281,9 +322,9 @@ const RouteBuilder: React.FC = () => {
               <>
                 <div className="glass-panel border border-white/5 rounded-2xl p-6 animate-slide-up relative overflow-hidden">
                   <div className={`absolute top-0 left-0 w-1 h-full ${analysis.profit > 0 ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                  
+
                   <h3 className="text-sm font-bold text-slate-400 uppercase mb-4">Resultado Financiero</h3>
-                  
+
                   <div className="mb-6">
                     <span className="text-xs text-slate-500 uppercase tracking-wider">Utilidad Neta</span>
                     <div className={`text-4xl font-bold mt-1 ${analysis.profit > 0 ? 'text-green-400' : 'text-red-400'}`}>
@@ -312,7 +353,7 @@ const RouteBuilder: React.FC = () => {
 
                 <div className="glass-panel border border-white/5 rounded-2xl p-6 animate-slide-up" style={{ animationDelay: '0.1s' }}>
                   <h3 className="text-sm font-bold text-slate-400 uppercase mb-4">Desglose de Costos</h3>
-                  
+
                   <div className="space-y-3">
                     {Object.entries(analysis.breakdownCosts).map(([key, value]) => {
                       const percentage = ((value / analysis.totalCosts) * 100).toFixed(1);
@@ -330,7 +371,7 @@ const RouteBuilder: React.FC = () => {
                         insurance: 'Seguro',
                         maintenance: 'Mantención',
                       };
-                      
+
                       return (
                         <div key={key}>
                           <div className="flex items-center justify-between text-sm mb-1">
@@ -341,7 +382,7 @@ const RouteBuilder: React.FC = () => {
                             <span className="font-mono text-white">${value.toLocaleString()}</span>
                           </div>
                           <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
-                            <div 
+                            <div
                               className="h-full bg-gradient-to-r from-brand-500 to-accent-500 rounded-full"
                               style={{ width: `${percentage}%` }}
                             ></div>
@@ -408,10 +449,9 @@ const RouteBuilder: React.FC = () => {
                         </span>
                       </td>
                       <td className="p-4 text-right">
-                        <span className={`font-bold ${
-                          route.profitMargin > 20 ? 'text-green-400' : 
+                        <span className={`font-bold ${route.profitMargin > 20 ? 'text-green-400' :
                           route.profitMargin > 10 ? 'text-yellow-400' : 'text-red-400'
-                        }`}>
+                          }`}>
                           {route.profitMargin}%
                         </span>
                       </td>
@@ -434,7 +474,7 @@ const RouteBuilder: React.FC = () => {
 const Input = ({ label, error, ...props }: any) => (
   <div>
     <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{label}</label>
-    <input 
+    <input
       {...props}
       className={`w-full bg-dark-900 border rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-brand-500 outline-none transition-colors placeholder-slate-600 ${error ? 'border-red-500/50' : 'border-white/10'}`}
     />

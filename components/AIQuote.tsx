@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { generateSmartQuote } from '../services/geminiService';
 import { QuoteResult } from '../types';
 import { Send, Package, Clock, DollarSign, AlertCircle, CheckCircle2, Loader2, Truck } from 'lucide-react';
+import showToast from './Toast';
+import { ERROR_MESSAGES } from '../utils/errorMessages';
 
 const AIQuote: React.FC = () => {
   const [description, setDescription] = useState('');
@@ -10,16 +12,21 @@ const AIQuote: React.FC = () => {
   const [loading, setLoading] = useState(false);
 
   const handleOptimize = async () => {
-    if (!description || !distance) return;
-    
+    if (!description || !distance) {
+      showToast.warning(ERROR_MESSAGES.FORM_INCOMPLETE);
+      return;
+    }
+
     setLoading(true);
     setResult(null);
-    
+
     try {
       const data = await generateSmartQuote(description, distance);
       setResult(data);
+      showToast.success("Optimización completada");
     } catch (e) {
       console.error(e);
+      showToast.error(ERROR_MESSAGES.SAVE_ERROR);
     } finally {
       setLoading(false);
     }
@@ -67,7 +74,7 @@ const AIQuote: React.FC = () => {
                   placeholder="e.g., New York to Boston, approx 215 miles"
                 />
               </div>
-              
+
               <button
                 onClick={handleOptimize}
                 disabled={loading || !description || !distance}
@@ -100,11 +107,11 @@ const AIQuote: React.FC = () => {
 
             {loading && (
               <div className="h-full flex flex-col items-center justify-center bg-slate-900/30 rounded-2xl border border-slate-800/50 backdrop-blur-sm">
-                 <div className="relative w-24 h-24">
-                    <div className="absolute inset-0 border-t-4 border-brand-500 rounded-full animate-spin"></div>
-                    <div className="absolute inset-2 border-b-4 border-accent-500 rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s'}}></div>
-                 </div>
-                 <p className="mt-6 text-brand-400 font-mono text-sm animate-pulse">OPTIMIZING ROUTE & CARGO...</p>
+                <div className="relative w-24 h-24">
+                  <div className="absolute inset-0 border-t-4 border-brand-500 rounded-full animate-spin"></div>
+                  <div className="absolute inset-2 border-b-4 border-accent-500 rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
+                </div>
+                <p className="mt-6 text-brand-400 font-mono text-sm animate-pulse">OPTIMIZING ROUTE & CARGO...</p>
               </div>
             )}
 
@@ -158,11 +165,11 @@ const AIQuote: React.FC = () => {
                     </ul>
                   </div>
                 </div>
-                
+
                 <div className="mt-6 pt-4 border-t border-slate-700 text-center">
-                    <button className="text-sm text-brand-400 hover:text-brand-300 font-medium transition-colors">
-                        Book this fleet now &rarr;
-                    </button>
+                  <button className="text-sm text-brand-400 hover:text-brand-300 font-medium transition-colors">
+                    Book this fleet now &rarr;
+                  </button>
                 </div>
               </div>
             )}

@@ -2,7 +2,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { QuoteResult, Vehicle, MaintenancePrediction, FinancialReport } from "../types";
 
-const apiKey = process.env.API_KEY;
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 const ai = new GoogleGenAI({ apiKey: apiKey });
 
 // Instructions updated to Spanish
