@@ -35,8 +35,10 @@ const MOCK_LOCATIONS = [
 const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({ label, value, onChange, placeholder, error }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [query, setQuery] = useState(value);
-    const [filtered, setFiltered] = useState(MOCK_LOCATIONS);
+    const [filtered, setFiltered] = useState<any[]>(MOCK_LOCATIONS);
+    const [isLoading, setIsLoading] = useState(false);
     const wrapperRef = useRef<HTMLDivElement>(null);
+    const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
         setQuery(value);
@@ -52,18 +54,52 @@ const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({ label, value,
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    const searchNominatim = async (searchText: string) => {
+        if (!searchText || searchText.length < 3) return;
+        
+        setIsLoading(true);
+        try {
+            // Search restricted to Chile (countrycodes=cl)
+            const response = await fetch(
+                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchText)}&countrycodes=cl&limit=5`
+            );
+            const data = await response.json();
+            
+            const formattedResults = data.map((item: any) => ({
+                name: item.display_name,
+                coords: [parseFloat(item.lat), parseFloat(item.lon)]
+            }));
+
+            // Combine mock matches with API results
+            const mockMatches = MOCK_LOCATIONS.filter(loc =>
+                loc.name.toLowerCase().includes(searchText.toLowerCase())
+            );
+
+            // Prioritize mocks, then API results
+            setFiltered([...mockMatches, ...formattedResults]);
+            setIsOpen(true);
+        } catch (error) {
+            console.error("Error searching address:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
         const text = e.target.value;
         setQuery(text);
         onChange(text); // Update parent with raw text immediately
 
-        if (text.length > 0) {
-            const matches = MOCK_LOCATIONS.filter(loc =>
-                loc.name.toLowerCase().includes(text.toLowerCase())
-            );
-            setFiltered(matches);
-            setIsOpen(true);
+        if (debounceRef.current) {
+            clearTimeout(debounceRef.current);
+        }
+
+        if (text.length > 2) {
+            debounceRef.current = setTimeout(() => {
+                searchNominatim(text);
+            }, 500); // 500ms debounce
         } else {
+            setFiltered(MOCK_LOCATIONS);
             setIsOpen(false);
         }
     };
@@ -86,7 +122,7 @@ const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({ label, value,
                     className={`w-full bg-dark-900 border rounded-xl px-4 py-3 pl-10 text-white focus:ring-2 focus:ring-brand-500 outline-none transition-colors placeholder-slate-600 ${error ? 'border-red-500/50' : 'border-white/10'}`}
                     placeholder={placeholder || "Buscar dirección..."}
                 />
-                <Search className="absolute left-3 top-3.5 w-4 h-4 text-slate-500" />
+                <Search className={`absolute left-3 top-3.5 w-4 h-4 ${isLoading ? 'text-brand-500 animate-pulse' : 'text-slate-500'}`} />
             </div>
 
             {error && <p className="text-red-400 text-xs mt-1">{error}</p>}
