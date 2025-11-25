@@ -21,7 +21,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
   global: {
     headers: {
-      'x-application-name': 'FleetMaster',
+      'x-application-name': 'FleetTech',
     },
   },
 });

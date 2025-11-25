@@ -1,7 +1,8 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
+import { useStore } from '../store/useStore';
 import { analyzeFleetHealth } from '../services/geminiService';
-import { Vehicle } from '../types';
-import { BarChart3, Fuel, Wrench, TrendingUp, AlertCircle, Zap, MapPin, BellRing, Calendar, ArrowUpRight, ArrowDownRight, X } from 'lucide-react';
+import { Vehicle, AppView } from '../types';
+import { BarChart3, Fuel, Wrench, TrendingUp, AlertCircle, Zap, MapPin, BellRing, Calendar, ArrowUpRight, ArrowDownRight, X, Package, Clock, CheckCircle2, Loader2 } from 'lucide-react';
 import MapSkeleton from './MapSkeleton';
 import Sparkline from './Sparkline';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
@@ -50,8 +51,42 @@ const sparklineData = {
 };
 
 const Dashboard: React.FC = () => {
-   const [aiInsight, setAiInsight] = useState("Inicializando FleetMaster AI...");
+   const [aiInsight, setAiInsight] = useState("Inicializando FleetTech AI...");
    const [dateRange, setDateRange] = useState('month');
+   const registeredRoutes = useStore((state) => state.registeredRoutes);
+
+   // FLOTA ACTIVA: Calcular vehículos activos vs total
+   const activeVehicles = initialVehicles.filter(v => v.status === 'Active').length;
+   const totalVehicles = initialVehicles.length;
+   const fleetChange = Math.round(((activeVehicles - 22) / 22) * 100); // Comparado con periodo anterior
+
+   // EFICIENCIA: Calcular consumo promedio basado en nivel de combustible
+   const avgFuelEfficiency = initialVehicles.reduce((sum, v) => sum + v.fuelLevel, 0) / totalVehicles / 100 * 4.5;
+   const fuelEfficiency = avgFuelEfficiency.toFixed(1);
+   const fuelVsTarget = (avgFuelEfficiency - 3.3).toFixed(1);
+
+   // MANTENIMIENTO: Contar vehículos en mantenimiento y próximos servicios
+   const maintenanceVehicles = initialVehicles.filter(v => v.status === 'Maintenance').length;
+   const upcomingService = initialVehicles.filter(v => {
+      const serviceDate = new Date(v.nextService);
+      const today = new Date();
+      const daysUntil = (serviceDate.getTime() - today.getTime()) / (1000 * 3600 * 24);
+      return daysUntil <= 7 && daysUntil > 0;
+   }).length;
+   const totalPending = maintenanceVehicles + upcomingService;
+   const criticalCount = initialVehicles.filter(v => v.fuelLevel < 20 || v.status === 'Maintenance').length;
+
+   // INGRESOS: Calcular desde rutas registradas
+   const registeredRevenue = registeredRoutes.reduce((acc, route) => {
+      const price = parseInt(route.estimatedPrice.replace(/[^0-9]/g, '')) || 0;
+      return acc + price;
+   }, 0);
+   
+   // Base revenue histórico + nuevas rutas
+   const baseRevenue = 84000000;
+   const totalRevenue = baseRevenue + registeredRevenue;
+   const formattedRevenue = `$${(totalRevenue / 1000000).toFixed(1)}M`;
+   const revenueGrowth = ((registeredRevenue / baseRevenue) * 100).toFixed(0);
 
    useEffect(() => {
       const fetchInsight = async () => {
@@ -101,9 +136,10 @@ const Dashboard: React.FC = () => {
                         <TruckIcon className="text-brand-500 w-5 h-5" />
                      </div>
                   </div>
-                  <div className="text-3xl font-bold text-white mb-1 relative z-10">24<span className="text-lg text-slate-500 font-normal">/28</span></div>
-                  <div className="flex items-center gap-1 text-xs text-green-400 mb-4 relative z-10">
-                     <ArrowUpRight className="w-3 h-3" /> +2 vs semana anterior
+                  <div className="text-3xl font-bold text-white mb-1 relative z-10">{activeVehicles}<span className="text-lg text-slate-500 font-normal">/{totalVehicles}</span></div>
+                  <div className={`flex items-center gap-1 text-xs ${fleetChange >= 0 ? 'text-green-400' : 'text-red-400'} mb-4 relative z-10`}>
+                     {fleetChange >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                     {Math.abs(fleetChange)}% vs semana anterior
                   </div>
                   <div className="absolute bottom-0 left-0 right-0 h-16 opacity-30 group-hover:opacity-50 transition-opacity">
                      <Sparkline data={sparklineData.fleet} color="#6366f1" />
@@ -117,9 +153,10 @@ const Dashboard: React.FC = () => {
                         <Fuel className="text-accent-500 w-5 h-5" />
                      </div>
                   </div>
-                  <div className="text-3xl font-bold text-white mb-1 relative z-10">3.2<span className="text-lg text-slate-500 font-normal">km/L</span></div>
-                  <div className="flex items-center gap-1 text-xs text-red-400 mb-4 relative z-10">
-                     <ArrowDownRight className="w-3 h-3" /> -0.1 vs objetivo
+                  <div className="text-3xl font-bold text-white mb-1 relative z-10">{fuelEfficiency}<span className="text-lg text-slate-500 font-normal">km/L</span></div>
+                  <div className={`flex items-center gap-1 text-xs ${parseFloat(fuelVsTarget) >= 0 ? 'text-green-400' : 'text-red-400'} mb-4 relative z-10`}>
+                     {parseFloat(fuelVsTarget) >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                     {fuelVsTarget} vs objetivo
                   </div>
                   <div className="absolute bottom-0 left-0 right-0 h-16 opacity-30 group-hover:opacity-50 transition-opacity">
                      <Sparkline data={sparklineData.fuel} color="#ec4899" />
@@ -133,9 +170,9 @@ const Dashboard: React.FC = () => {
                         <Wrench className="text-orange-500 w-5 h-5" />
                      </div>
                   </div>
-                  <div className="text-3xl font-bold text-white mb-1 relative z-10">3<span className="text-lg text-slate-500 font-normal"> Pendientes</span></div>
+                  <div className="text-3xl font-bold text-white mb-1 relative z-10">{totalPending}<span className="text-lg text-slate-500 font-normal"> Pendientes</span></div>
                   <div className="flex items-center gap-1 text-xs text-orange-400 mb-4 relative z-10">
-                     <AlertCircle className="w-3 h-3" /> 1 Crítico
+                     <AlertCircle className="w-3 h-3" /> {criticalCount} Crítico{criticalCount !== 1 ? 's' : ''}
                   </div>
                   <div className="absolute bottom-0 left-0 right-0 h-16 opacity-30 group-hover:opacity-50 transition-opacity">
                      <Sparkline data={sparklineData.maintenance} color="#f97316" />
@@ -149,58 +186,132 @@ const Dashboard: React.FC = () => {
                         <BarChart3 className="text-green-500 w-5 h-5" />
                      </div>
                   </div>
-                  <div className="text-3xl font-bold text-white mb-1 relative z-10">$84M</div>
+                  <div className="text-3xl font-bold text-white mb-1 relative z-10">{formattedRevenue}</div>
                   <div className="flex items-center gap-1 text-xs text-green-400 mb-4 relative z-10">
-                     <ArrowUpRight className="w-3 h-3" /> +12% vs mes anterior
+                     <ArrowUpRight className="w-3 h-3" /> +{revenueGrowth}% vs mes anterior
                   </div>
+                  {registeredRoutes.length > 0 && (
+                     <div className="text-[10px] text-slate-500 mb-2 relative z-10">
+                        {registeredRoutes.length} ruta{registeredRoutes.length !== 1 ? 's' : ''} nueva{registeredRoutes.length !== 1 ? 's' : ''} (+${(registeredRevenue / 1000).toFixed(0)}K)
+                     </div>
+                  )}
                   <div className="absolute bottom-0 left-0 right-0 h-16 opacity-30 group-hover:opacity-50 transition-opacity">
                      <Sparkline data={sparklineData.revenue} color="#22c55e" />
                   </div>
                </div>
             </div>
 
-            {/* Charts & Map Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-               {/* Financial Trends Chart */}
-               <div className="lg:col-span-2 glass-panel rounded-2xl border border-white/5 p-6 animate-fade-in">
-                  <div className="flex items-center justify-between mb-6">
-                     <h3 className="text-white font-bold text-lg">Tendencias Financieras</h3>
-                     <div className="flex gap-2">
-                        <div className="flex items-center gap-2 text-xs text-slate-400">
-                           <span className="w-2 h-2 rounded-full bg-brand-500"></span> Ingresos
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-slate-400">
-                           <span className="w-2 h-2 rounded-full bg-red-500"></span> Costos
-                        </div>
-                     </div>
+            {/* Rutas Registradas Section */}
+            <div className="glass-panel rounded-2xl border border-white/5 p-6 mb-8 animate-fade-in">
+               <div className="flex items-center justify-between mb-6">
+                  <div>
+                     <h3 className="text-white font-bold text-lg flex items-center gap-2">
+                        <Package className="w-5 h-5 text-brand-500" />
+                        Rutas Registradas
+                     </h3>
+                     <p className="text-slate-400 text-sm mt-1">
+                        {registeredRoutes.length} {registeredRoutes.length === 1 ? 'ruta activa' : 'rutas activas'}
+                     </p>
                   </div>
-                  <div className="h-[300px] w-full">
-                     <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={revenueData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                           <defs>
-                              <linearGradient id="colorIngresos" x1="0" y1="0" x2="0" y2="1">
-                                 <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                                 <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                              </linearGradient>
-                              <linearGradient id="colorCostos" x1="0" y1="0" x2="0" y2="1">
-                                 <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-                                 <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-                              </linearGradient>
-                           </defs>
-                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                           <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
-                           <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}M`} />
-                           <Tooltip
-                              contentStyle={{ backgroundColor: '#0f172a', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '12px' }}
-                              itemStyle={{ color: '#fff' }}
-                           />
-                           <Area type="monotone" dataKey="ingresos" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorIngresos)" />
-                           <Area type="monotone" dataKey="costos" stroke="#ef4444" strokeWidth={3} fillOpacity={1} fill="url(#colorCostos)" />
-                        </AreaChart>
-                     </ResponsiveContainer>
+                  <div className="flex gap-2">
+                     <button className="px-3 py-1.5 text-xs bg-white/5 text-slate-300 border border-white/10 rounded-lg hover:bg-white/10 transition-colors">
+                        Todas
+                     </button>
+                     <button className="px-3 py-1.5 text-xs bg-white/5 text-slate-300 border border-white/10 rounded-lg hover:bg-white/10 transition-colors">
+                        Pendientes
+                     </button>
+                     <button className="px-3 py-1.5 text-xs bg-white/5 text-slate-300 border border-white/10 rounded-lg hover:bg-white/10 transition-colors">
+                        En Progreso
+                     </button>
                   </div>
                </div>
 
+               {registeredRoutes.length === 0 ? (
+                  <div className="text-center py-12">
+                     <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white/5 mb-4">
+                        <Package className="w-8 h-8 text-slate-500" />
+                     </div>
+                     <h4 className="text-white font-semibold mb-2">No hay rutas registradas</h4>
+                     <p className="text-slate-400 text-sm mb-4">
+                        Las rutas que registres desde el Planificador aparecerán aquí
+                     </p>
+                     <button
+                        onClick={() => useStore.getState().setView(AppView.ROUTE_BUILDER)}
+                        className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-700 transition-colors"
+                     >
+                        Crear Nueva Ruta
+                     </button>
+                  </div>
+               ) : (
+                  <div className="overflow-x-auto -mx-6 px-6">
+                     <table className="w-full min-w-[800px]">
+                        <thead>
+                           <tr className="border-b border-white/5">
+                              <th className="text-left py-3 px-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Estado</th>
+                              <th className="text-left py-3 px-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Origen</th>
+                              <th className="text-left py-3 px-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Destino</th>
+                              <th className="text-left py-3 px-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Distancia</th>
+                              <th className="text-left py-3 px-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Vehículo</th>
+                              <th className="text-left py-3 px-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Precio</th>
+                              <th className="text-left py-3 px-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Fecha</th>
+                           </tr>
+                        </thead>
+                        <tbody>
+                           {registeredRoutes.map((route) => (
+                              <tr key={route.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                                 <td className="py-4 px-4">
+                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${route.status === 'Completed'
+                                       ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+                                       : route.status === 'In Progress'
+                                          ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                          : 'bg-orange-500/10 text-orange-400 border border-orange-500/20'
+                                       }`}>
+                                       {route.status === 'Completed' && <CheckCircle2 className="w-3 h-3" />}
+                                       {route.status === 'In Progress' && <Loader2 className="w-3 h-3 animate-spin" />}
+                                       {route.status === 'Pending' && <Clock className="w-3 h-3" />}
+                                       {route.status === 'Completed' ? 'Completada' : route.status === 'In Progress' ? 'En Progreso' : 'Pendiente'}
+                                    </span>
+                                 </td>
+                                 <td className="py-4 px-4">
+                                    <div className="flex items-start gap-2">
+                                       <MapPin className="w-4 h-4 text-brand-500 mt-0.5 shrink-0" />
+                                       <span className="text-white text-sm">{route.origin}</span>
+                                    </div>
+                                 </td>
+                                 <td className="py-4 px-4">
+                                    <div className="flex items-start gap-2">
+                                       <MapPin className="w-4 h-4 text-accent-500 mt-0.5 shrink-0" />
+                                       <span className="text-white text-sm">{route.destination}</span>
+                                    </div>
+                                 </td>
+                                 <td className="py-4 px-4">
+                                    <span className="text-slate-300 text-sm font-mono">{route.distance}</span>
+                                 </td>
+                                 <td className="py-4 px-4">
+                                    <span className="text-slate-300 text-sm">{route.vehicleType}</span>
+                                 </td>
+                                 <td className="py-4 px-4">
+                                    <span className="text-green-400 text-sm font-semibold">{route.estimatedPrice}</span>
+                                 </td>
+                                 <td className="py-4 px-4">
+                                    <span className="text-slate-400 text-xs">
+                                       {new Date(route.timestamp).toLocaleDateString('es-CL', {
+                                          day: '2-digit',
+                                          month: 'short',
+                                          year: 'numeric'
+                                       })}
+                                    </span>
+                                 </td>
+                              </tr>
+                           ))}
+                        </tbody>
+                     </table>
+                  </div>
+               )}
+            </div>
+
+            {/* Alerts & Map Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
                {/* Smart Alerts Feed */}
                <div className="lg:col-span-1 flex flex-col gap-6">
                   <div className="glass-panel border border-white/5 rounded-2xl p-6 animate-slide-in-right h-full">
@@ -239,32 +350,12 @@ const Dashboard: React.FC = () => {
                      </button>
                   </div>
                </div>
-            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
                {/* Interactive Map with Leaflet - Lazy Loaded */}
                <div className="lg:col-span-2 glass-panel rounded-2xl border border-white/5 p-1 relative min-h-[400px] overflow-hidden animate-fade-in">
                   <Suspense fallback={<MapSkeleton />}>
                      <FleetMap vehicles={initialVehicles} />
                   </Suspense>
-               </div>
-
-               {/* Gemini Box */}
-               <div className="lg:col-span-1">
-                  <div className="glass-card p-6 rounded-2xl border-t-2 border-t-brand-500 animate-slide-in-right h-full" style={{ animationDelay: '0.1s' }}>
-                     <div className="flex items-center gap-2 mb-4">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-emerald-700 flex items-center justify-center shadow-lg">
-                           <Zap className="w-4 h-4 text-white" />
-                        </div>
-                        <div>
-                           <h3 className="text-white font-bold text-sm">Resumen Operativo</h3>
-                           <p className="text-[10px] text-slate-400 uppercase tracking-wider">Gemini Live</p>
-                        </div>
-                     </div>
-                     <p className="text-slate-300 text-sm leading-relaxed font-light">
-                        {aiInsight}
-                     </p>
-                  </div>
                </div>
             </div>
 

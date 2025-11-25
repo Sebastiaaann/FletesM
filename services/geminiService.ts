@@ -6,7 +6,7 @@ const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 const ai = new GoogleGenAI({ apiKey: apiKey });
 
 // Instructions updated to Spanish
-const SYSTEM_INSTRUCTION = `Eres FleetMaster AI, un experto en operaciones logísticas. 
+const SYSTEM_INSTRUCTION = `Eres FleetTech AI, un experto en operaciones logísticas. 
 Tu objetivo es optimizar el rendimiento de la flota, reducir costos y garantizar la seguridad.
 Prioriza insights accionables basados en datos. Responde SIEMPRE en español.`;
 

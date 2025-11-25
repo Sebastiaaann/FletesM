@@ -26,7 +26,7 @@ const Hero: React.FC = () => {
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-500"></span>
           </span>
-          <span className="text-brand-400 text-xs font-bold tracking-widest uppercase">FleetMaster </span>
+          <span className="text-brand-400 text-xs font-bold tracking-widest uppercase">FleetTech </span>
         </div>
 
         <h1 className="text-5xl md:text-8xl font-bold text-white mb-8 tracking-tighter leading-[1.1] animate-slide-up">
@@ -69,7 +69,7 @@ const Hero: React.FC = () => {
 
         {/* Social Proof */}
         <div className="mt-16 pt-8 border-t border-white/5 animate-fade-in" style={{ animationDelay: '0.5s' }}>
-          <p className="text-sm text-slate-500 mb-6 uppercase tracking-widest font-semibold">Confían en FleetMaster</p>
+          <p className="text-sm text-slate-500 mb-6 uppercase tracking-widest font-semibold">Confían en FleetTech</p>
           <div className="flex flex-wrap justify-center gap-8 md:gap-16 opacity-50 grayscale hover:grayscale-0 transition-all duration-500">
             {['Logística Sur', 'TransAndina', 'CargoChile', 'PacificPort'].map((brand, i) => (
               <div key={i} className="flex items-center gap-2 text-white font-bold text-xl">

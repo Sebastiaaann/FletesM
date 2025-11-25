@@ -1,7 +1,7 @@
-# FleetMaster – Informe Final Proyecto IA
+# FleetTech – Informe Final Proyecto IA
 
 ## 1. Nombre del Proyecto
-**FleetMaster: Plataforma Inteligente de Gestión y Optimización de Flotas Logísticas.**
+**FleetTech: Plataforma Inteligente de Gestión y Optimización de Flotas Logísticas.**
 
 ## 2. Problema Identificado en el Negocio / Empresa
 Las PYMEs y operadores medianos de transporte en Latinoamérica carecen de una solución integral que unifique:
@@ -17,7 +17,7 @@ Consecuencias actuales:
 - Riesgo legal por documentación vencida y falta de alertas preventivas.
 - Baja rentabilidad por ausencia de analítica integrada y decisiones tardías.
 
-FleetMaster aborda estas brechas mediante una plataforma todo‑en‑uno con IA generativa y componentes analíticos especializados.
+FleetTech aborda estas brechas mediante una plataforma todo‑en‑uno con IA generativa y componentes analíticos especializados.
 
 ## 3. Modelo de Negocio Propuesto y Rol Estratégico de la IA
 **Segmentos Objetivo:**
@@ -97,7 +97,7 @@ Seguridad: HTTPS, tokens JWT de Supabase, auditoría de accesos, CORS controlado
 - **Impacto organizacional:** Automatización reduce trabajo manual y requiere re‑entrenamiento del personal para tareas analíticas.  
 
 ## 9. Comparación con Casos Reales y Benchmark
-| Competidor | Fortaleza Principal | Brecha que FleetMaster Aprovecha |
+| Competidor | Fortaleza Principal | Brecha que FleetTech Aprovecha |
 |------------|--------------------|----------------------------------|
 | Samsara | Integración hardware + telemática avanzada | Alto costo y enfoque enterprise. |
 | Geotab | Gran ecosistema de datos vehiculares | Menor foco regional (español / normativa local). |
@@ -105,10 +105,10 @@ Seguridad: HTTPS, tokens JWT de Supabase, auditoría de accesos, CORS controlado
 | Uber Freight | Marketplace de cargas | No ofrece gestión interna de flota propia. |
 | Project44 | Visibilidad global cadena suministro | Costos y complejidad para PYMEs regionales. |
 
-**Diferenciadores FleetMaster:** Todo‑en‑uno (rutas + finanzas + legal + IA), localización en español, entrada Freemium, escalabilidad modular.
+**Diferenciadores FleetTech:** Todo‑en‑uno (rutas + finanzas + legal + IA), localización en español, entrada Freemium, escalabilidad modular.
 
 ## 10. Conclusiones y Visión de Futuro
-FleetMaster establece una base sólida de digitalización logística para operadores medianos, reduciendo costos y riesgos mientras acelera decisiones.  
+FleetTech establece una base sólida de digitalización logística para operadores medianos, reduciendo costos y riesgos mientras acelera decisiones.  
 **Roadmap Próximo:**
 - Optimización avanzada VRP multi‑parada y ventanas temporales.  
 - Motor de mantenimiento predictivo (modelos supervisados).  
@@ -166,4 +166,4 @@ Adquisición → Normalización → Feature Engineering → Entrenamiento / Ajus
 
 **Anexos (Opcional Futuro):** Diagramas de arquitectura, ejemplos de prompts Gemini, esquema de tablas Supabase.
 
-> Este informe cumple los requisitos solicitados para la Entrega Final del Proyecto de IA y deja delineado el camino técnico y estratégico para la evolución de FleetMaster.
+> Este informe cumple los requisitos solicitados para la Entrega Final del Proyecto de IA y deja delineado el camino técnico y estratégico para la evolución de FleetTech.

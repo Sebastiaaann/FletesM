@@ -1,15 +1,17 @@
 
 import React, { useState, useMemo } from 'react';
+import { useStore } from '../store/useStore';
 import { analyzeFinancials } from '../services/geminiService';
 import { FinancialReport } from '../types';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
-import { TrendingUp, DollarSign, Award, ArrowRight, Zap, Loader2, MapPin, FileText, CheckCircle2, UploadCloud, Printer, Filter, Download } from 'lucide-react';
+import { TrendingUp, DollarSign, Award, ArrowRight, Zap, Loader2, MapPin, FileText, CheckCircle2, UploadCloud, Printer, Filter, Download, Trash2, X } from 'lucide-react';
 
 const Financials: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'profit' | 'invoicing'>('profit');
     const [report, setReport] = useState<FinancialReport | null>(null);
     const [loading, setLoading] = useState(false);
+    const registeredRoutes = useStore((state) => state.registeredRoutes);
 
     // Filters State
     const [dateRange, setDateRange] = useState('30'); // days
@@ -24,14 +26,44 @@ const Financials: React.FC = () => {
     ]);
     const [processingId, setProcessingId] = useState<number | null>(null);
 
-    // Mock Data for analysis (Expanded)
-    const rawRouteData = [
+    // Mock Data for analysis (Expanded) - Now mutable
+    const [mockRouteData, setMockRouteData] = useState([
         { id: "R-101", route: "Stgo - Valpo", driver: "Carlos Mendoza", vehicle: "V-101", revenue: 450000, cost: 280000, margin: 37, fuel: 120000, maintenance: 50000, wages: 80000, tolls: 30000 },
         { id: "R-102", route: "Stgo - Concepción", driver: "Ana Silva", vehicle: "V-102", revenue: 1200000, cost: 650000, margin: 45, fuel: 300000, maintenance: 100000, wages: 200000, tolls: 50000 },
         { id: "R-103", route: "Puerto Montt - Osorno", driver: "Jorge O'Ryan", vehicle: "V-103", revenue: 180000, cost: 160000, margin: 11, fuel: 80000, maintenance: 40000, wages: 30000, tolls: 10000 },
         { id: "R-104", route: "Antofagasta - Calama", driver: "Luis Toro", vehicle: "V-104", revenue: 850000, cost: 400000, margin: 52, fuel: 150000, maintenance: 80000, wages: 120000, tolls: 50000 },
         { id: "R-105", route: "Stgo - La Serena", driver: "Carlos Mendoza", vehicle: "V-101", revenue: 600000, cost: 350000, margin: 41, fuel: 140000, maintenance: 60000, wages: 100000, tolls: 50000 },
-    ];
+    ]);
+
+    // Delete confirmation state
+    const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+    const registeredRouteData = useMemo(() => {
+        return registeredRoutes.map(route => {
+            const revenue = parseInt(route.estimatedPrice.replace(/[^0-9]/g, '')) || 0;
+            const cost = Math.round(revenue * 0.6); // Est. 60% cost
+            const margin = Math.round(((revenue - cost) / revenue) * 100);
+
+            return {
+                id: route.id,
+                route: `${route.origin.split(',')[0]} - ${route.destination.split(',')[0]}`,
+                driver: route.driver || "Asignación Pendiente",
+                vehicle: route.vehicleType,
+                revenue,
+                cost,
+                margin,
+                fuel: Math.round(cost * 0.4),
+                maintenance: Math.round(cost * 0.2),
+                wages: Math.round(cost * 0.3),
+                tolls: Math.round(cost * 0.1)
+            };
+        });
+    }, [registeredRoutes]);
+
+    // Combine route data
+    const rawRouteData = useMemo(() => {
+        return [...mockRouteData, ...registeredRouteData];
+    }, [mockRouteData, registeredRouteData]);
 
     // Filtered Data
     const filteredData = useMemo(() => {
@@ -41,6 +73,22 @@ const Financials: React.FC = () => {
             return driverMatch && vehicleMatch;
         });
     }, [selectedDriver, selectedVehicle, rawRouteData]);
+
+    // Delete route handler
+    const handleDeleteRoute = (routeId: string) => {
+        // Check if it's from mockRouteData or registeredRoutes
+        const isMockRoute = mockRouteData.some(route => route.id === routeId);
+        
+        if (isMockRoute) {
+            setMockRouteData(prev => prev.filter(route => route.id !== routeId));
+        } else {
+            // If from registeredRoutes, remove from store
+            const removeRoute = useStore.getState().removeRoute;
+            removeRoute(routeId);
+        }
+        
+        setDeleteConfirm(null);
+    };
 
     // Aggregated Data for Charts
     const costBreakdown = useMemo(() => {
@@ -324,6 +372,7 @@ const Financials: React.FC = () => {
                                             <th className="p-4 text-right">Costos</th>
                                             <th className="p-4 text-right">Margen</th>
                                             <th className="p-4">Estado</th>
+                                            <th className="p-4 text-center">Acciones</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-white/5">
@@ -345,6 +394,36 @@ const Financials: React.FC = () => {
                                                         <span className="px-2 py-1 bg-red-500/10 text-red-400 text-xs rounded font-bold border border-red-500/20">Revisar</span>
                                                     ) : (
                                                         <span className="px-2 py-1 bg-slate-800 text-slate-400 text-xs rounded border border-slate-700">Normal</span>
+                                                    )}
+                                                </td>
+                                                <td className="p-4">
+                                                    {deleteConfirm === r.id ? (
+                                                        <div className="flex items-center justify-center gap-2">
+                                                            <button
+                                                                onClick={() => handleDeleteRoute(r.id)}
+                                                                className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-xs rounded transition-colors flex items-center gap-1"
+                                                            >
+                                                                <CheckCircle2 className="w-3 h-3" />
+                                                                Confirmar
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setDeleteConfirm(null)}
+                                                                className="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded transition-colors flex items-center gap-1"
+                                                            >
+                                                                <X className="w-3 h-3" />
+                                                                Cancelar
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex items-center justify-center">
+                                                            <button
+                                                                onClick={() => setDeleteConfirm(r.id)}
+                                                                className="p-2 hover:bg-red-500/10 text-slate-400 hover:text-red-400 rounded transition-colors group"
+                                                                title="Eliminar ruta"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
                                                     )}
                                                 </td>
                                             </tr>

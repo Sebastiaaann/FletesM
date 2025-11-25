@@ -16,8 +16,8 @@ export default defineConfig(({ mode }) => {
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
         manifest: {
-          name: 'FleetMaster - Gestión de Flotas IA',
-          short_name: 'FleetMaster',
+          name: 'FleetTech - Gestión de Flotas IA',
+          short_name: 'FleetTech',
           description: 'Plataforma avanzada de gestión de flotas con IA',
           theme_color: '#0f172a',
           background_color: '#0f172a',

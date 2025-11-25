@@ -1,5 +1,5 @@
 {
-  "name": "FleetMaster - Gestión de Flotas IA",
+  "name": "FleetTech - Gestión de Flotas IA",
   "description": "Plataforma premium de gestión de flotas para optimización logística, mantenimiento predictivo y control de costos impulsado por Gemini AI.",
   "requestFramePermissions": [
     "geolocation"

@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AppView } from '../types';
 import { useStore } from '../store/useStore';
-import { LayoutDashboard, Truck, Map, PieChart, Zap, FileCheck, Radar } from 'lucide-react';
+import { LayoutDashboard, Truck, Map, PieChart, Zap, FileCheck, Radar, Smartphone } from 'lucide-react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 
@@ -20,12 +20,12 @@ const Navbar: React.FC = () => {
 
   const navItems = [
     { id: AppView.DASHBOARD, label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
-    { id: AppView.TRACKING, label: 'Rastreo GPS', icon: <Radar className="w-5 h-5" /> },
     { id: AppView.FLEET, label: 'Equipo', icon: <Truck className="w-5 h-5" /> },
     { id: AppView.ROUTES, label: 'Rutas', icon: <Map className="w-5 h-5" /> },
     { id: AppView.ROUTE_BUILDER, label: 'Constructor', icon: <Zap className="w-5 h-5" /> },
     { id: AppView.FINANCIALS, label: 'Finanzas', icon: <PieChart className="w-5 h-5" /> },
     { id: AppView.COMPLIANCE, label: 'Cumplimiento', icon: <FileCheck className="w-5 h-5" /> },
+    { id: AppView.DRIVER_MOBILE, label: 'App Conductor', icon: <Smartphone className="w-5 h-5" /> },
   ];
 
   const toggleMenu = () => {
@@ -154,7 +154,7 @@ const Navbar: React.FC = () => {
               </div>
               <div className="flex flex-col">
                 <span className="text-xl font-bold tracking-tighter text-white leading-none">
-                  FLEET<span className="text-brand-500">MASTER</span>
+                  FLEET<span className="text-brand-500">TECH</span>
                 </span>
                 <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-semibold">OS Logístico</span>
               </div>
@@ -227,7 +227,7 @@ const Navbar: React.FC = () => {
           </div>
 
           <div className="font-light">
-            <p className="tracking-wider text-white/40 uppercase text-xs mb-2">FleetMaster</p>
+            <p className="tracking-wider text-white/40 uppercase text-xs mb-2">FleetTech</p>
             <p className="text-lg tracking-wide text-white/80">OS Logístico Inteligente</p>
           </div>
         </div>

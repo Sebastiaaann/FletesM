@@ -1,6 +1,6 @@
-# 🗄️ Configuración de Supabase para FleetMaster
+# 🗄️ Configuración de Supabase para FleetTech
 
-Esta guía te ayudará a configurar la base de datos en Supabase para tu proyecto FleetMaster.
+Esta guía te ayudará a configurar la base de datos en Supabase para tu proyecto FleetTech.
 
 ## 📋 Paso 1: Crear Proyecto en Supabase
 
@@ -8,7 +8,7 @@ Esta guía te ayudará a configurar la base de datos en Supabase para tu proyect
 2. Crea una cuenta o inicia sesión
 3. Click en "New Project"
 4. Completa los datos:
-   - **Name**: FleetMaster
+   - **Name**: FleetTech
    - **Database Password**: (guarda esta contraseña de forma segura)
    - **Region**: Elige la más cercana a tu ubicación
    - **Pricing Plan**: Free (suficiente para empezar)
@@ -329,4 +329,4 @@ ALTER TABLE vehicles DISABLE ROW LEVEL SECURITY;
 
 ---
 
-¡Listo! Tu base de datos está configurada y conectada a FleetMaster. 🚀
+¡Listo! Tu base de datos está configurada y conectada a FleetTech. 🚀

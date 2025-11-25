@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { generateSmartQuote } from '../services/geminiService';
-import { MapPin, Truck, DollarSign, Save, Calculator, Zap, AlertCircle, CheckCircle2, Loader2, PieChart, Fuel, FileText, Download } from 'lucide-react';
+import { MapPin, Truck, DollarSign, Save, Calculator, Zap, AlertCircle, CheckCircle2, Loader2, PieChart, Fuel, FileText, Download, Eye, X, Calendar, User } from 'lucide-react';
 import AddressAutocomplete from './AddressAutocomplete';
 import showToast from './Toast';
 import LoadingButton from './LoadingButton';
 import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '../utils/errorMessages';
+import { useStore } from '../store/useStore';
 
 interface RouteFormData {
   origin: string;
@@ -14,31 +15,18 @@ interface RouteFormData {
   cargoWeight: number;
   driver: string;
   vehicle: string;
-  fuelCostPerKm: number;
-  tollCosts: number;
-  driverWage: number;
-  insuranceCost: number;
-  maintenanceCost: number;
   clientQuote: number;
 }
 
 interface RouteAnalysis {
-  totalCosts: number;
   revenue: number;
-  profit: number;
-  profitMargin: number;
-  breakdownCosts: {
-    fuel: number;
-    tolls: number;
-    driver: number;
-    insurance: number;
-    maintenance: number;
-  };
   aiRecommendations: string[];
   riskScore: number;
 }
 
 const RouteBuilder: React.FC = () => {
+  const { pendingRouteData, clearPendingRouteData, addRoute, registeredRoutes, updateRouteStatus } = useStore();
+
   const [formData, setFormData] = useState<RouteFormData>({
     origin: '',
     destination: '',
@@ -47,19 +35,61 @@ const RouteBuilder: React.FC = () => {
     cargoWeight: 0,
     driver: '',
     vehicle: '',
-    fuelCostPerKm: 450,
-    tollCosts: 0,
-    driverWage: 0,
-    insuranceCost: 0,
-    maintenanceCost: 0,
     clientQuote: 0,
   });
+
+  const [originCoords, setOriginCoords] = useState<[number, number] | null>(null);
+  const [destCoords, setDestCoords] = useState<[number, number] | null>(null);
+  const [selectedRoute, setSelectedRoute] = useState<any | null>(null);
+
+  React.useEffect(() => {
+    if (pendingRouteData) {
+      setFormData(prev => ({
+        ...prev,
+        origin: pendingRouteData.origin,
+        destination: pendingRouteData.destination,
+        distance: parseFloat(pendingRouteData.distance.replace(/[^0-9.]/g, '')) || 0,
+        cargoDescription: pendingRouteData.cargoDescription,
+        clientQuote: parseFloat(pendingRouteData.estimatedPrice.replace(/[^0-9.]/g, '')) || 0,
+        vehicle: '', // Vehicle type from planner might not match dropdown exactly, let user choose or map it
+      }));
+      clearPendingRouteData();
+    }
+  }, [pendingRouteData, clearPendingRouteData]);
+
+  // Calculate distance when coords change
+  React.useEffect(() => {
+    if (originCoords && destCoords) {
+      const R = 6371; // Radius of the earth in km
+      const dLat = deg2rad(destCoords[0] - originCoords[0]);
+      const dLon = deg2rad(destCoords[1] - originCoords[1]);
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(deg2rad(originCoords[0])) * Math.cos(deg2rad(destCoords[0])) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const d = R * c; // Distance in km
+      setFormData(prev => ({ ...prev, distance: Math.round(d) }));
+    }
+  }, [originCoords, destCoords]);
+
+  // Auto-calculate estimated price when distance changes
+  React.useEffect(() => {
+    if (formData.distance > 0) {
+      // Simple estimation: 450 CLP per km (adjust as needed)
+      const estimatedPrice = Math.round(formData.distance * 450);
+      setFormData(prev => ({ ...prev, clientQuote: estimatedPrice }));
+    }
+  }, [formData.distance]);
+
+  const deg2rad = (deg: number) => {
+    return deg * (Math.PI / 180);
+  };
 
   const [analysis, setAnalysis] = useState<RouteAnalysis | null>(null);
   const [aiInsight, setAiInsight] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [savedRoutes, setSavedRoutes] = useState<any[]>([]);
 
   const availableDrivers = ['Carlos Mendoza', 'Ana Silva', 'Jorge O\'Ryan', 'Luis Toro'];
   const availableVehicles = ['HG-LF-99 (Volvo FH16)', 'JS-KK-22 (Scania R450)', 'LK-MM-11 (Mercedes Actros)'];
@@ -76,24 +106,10 @@ const RouteBuilder: React.FC = () => {
 
     setLoading(true);
 
-    const fuelCost = formData.distance * formData.fuelCostPerKm;
-    const totalCosts = fuelCost + formData.tollCosts + formData.driverWage + formData.insuranceCost + formData.maintenanceCost;
     const revenue = formData.clientQuote;
-    const profit = revenue - totalCosts;
-    const profitMargin = ((profit / revenue) * 100).toFixed(2);
 
     const newAnalysis: RouteAnalysis = {
-      totalCosts,
       revenue,
-      profit,
-      profitMargin: parseFloat(profitMargin),
-      breakdownCosts: {
-        fuel: fuelCost,
-        tolls: formData.tollCosts,
-        driver: formData.driverWage,
-        insurance: formData.insuranceCost,
-        maintenance: formData.maintenanceCost,
-      },
       aiRecommendations: [],
       riskScore: 0,
     };
@@ -125,14 +141,19 @@ const RouteBuilder: React.FC = () => {
       await new Promise(resolve => setTimeout(resolve, 800)); // Simulate API delay
 
       const newRoute = {
-        id: Date.now(),
-        ...formData,
-        ...analysis,
-        createdAt: new Date().toISOString(),
-        isTemplate: false
+        id: `R-${Date.now()}`,
+        origin: formData.origin,
+        destination: formData.destination,
+        distance: `${formData.distance} km`,
+        estimatedPrice: `$${formData.clientQuote.toLocaleString()}`,
+        vehicleType: aiInsight ? aiInsight.split('Vehículo sugerido:')[1]?.split('\n')[0]?.trim() || 'Camión estándar' : 'Camión estándar',
+        driver: formData.driver || 'Asignación Pendiente',
+        vehicle: formData.vehicle || undefined,
+        timestamp: Date.now(),
+        status: 'Pending' as const
       };
 
-      setSavedRoutes([newRoute, ...savedRoutes]);
+      addRoute(newRoute);
       showToast.success(SUCCESS_MESSAGES.ROUTE_SAVED);
     } catch (error) {
       showToast.error(ERROR_MESSAGES.SAVE_ERROR);
@@ -155,11 +176,6 @@ const RouteBuilder: React.FC = () => {
       cargoWeight: 0,
       driver: '',
       vehicle: '',
-      fuelCostPerKm: 450,
-      tollCosts: 0,
-      driverWage: 0,
-      insuranceCost: 0,
-      maintenanceCost: 0,
       clientQuote: 0,
     });
     setAnalysis(null);
@@ -182,40 +198,64 @@ const RouteBuilder: React.FC = () => {
 
           <div className="lg:col-span-2 space-y-6">
 
-            <div className="glass-panel border border-white/5 rounded-2xl p-4 md:p-6 animate-slide-up">
-              <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-brand-500" /> Detalles de Ruta
-              </h3>
+            <div className="glass-panel border border-white/5 rounded-2xl p-6 animate-slide-up">
+              <div className="space-y-5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Manifiesto de Carga</label>
+                  <textarea
+                    value={formData.cargoDescription}
+                    onChange={(e) => handleInputChange('cargoDescription', e.target.value)}
+                    className="w-full h-32 bg-dark-900 border border-white/10 rounded-xl p-4 text-white placeholder-slate-600 focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all resize-none"
+                    placeholder="ej: 12 Pallets de Electrónicos, aprox 4.5 toneladas. Frágil."
+                  />
+                </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <AddressAutocomplete
-                  label="Origen *"
-                  value={formData.origin}
-                  onChange={(val) => handleInputChange('origin', val)}
-                />
-                <AddressAutocomplete
-                  label="Destino *"
-                  value={formData.destination}
-                  onChange={(val) => handleInputChange('destination', val)}
-                />
-                <Input label="Distancia (km) *" type="number" value={formData.distance} onChange={(e) => handleInputChange('distance', parseFloat(e.target.value) || 0)} placeholder="120" />
-                <Input label="Peso Carga (ton)" type="number" value={formData.cargoWeight} onChange={(e) => handleInputChange('cargoWeight', parseFloat(e.target.value) || 0)} placeholder="8.5" />
-              </div>
-
-              <div className="mt-5">
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Descripción de Carga</label>
-                <textarea
-                  value={formData.cargoDescription}
-                  onChange={(e) => handleInputChange('cargoDescription', e.target.value)}
-                  className="w-full bg-dark-900 border border-white/10 rounded-xl p-4 text-white placeholder-slate-600 focus:ring-2 focus:ring-brand-500 outline-none resize-none h-24"
-                  placeholder="Ej: 12 pallets de electrodomésticos, frágil, requiere refrigeración"
-                />
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Detalles de Ruta</label>
+                  <div className="space-y-3">
+                    <AddressAutocomplete
+                      label="Origen"
+                      value={formData.origin}
+                      onChange={(val, coords) => {
+                        handleInputChange('origin', val);
+                        if (coords) setOriginCoords(coords);
+                      }}
+                    />
+                    <AddressAutocomplete
+                      label="Destino"
+                      value={formData.destination}
+                      onChange={(val, coords) => {
+                        handleInputChange('destination', val);
+                        if (coords) setDestCoords(coords);
+                      }}
+                    />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Distancia (km)</label>
+                        <input
+                          type="text"
+                          value={formData.distance > 0 ? `${formData.distance} km` : ''}
+                          readOnly
+                          className="w-full bg-dark-800 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:ring-2 focus:ring-brand-500 outline-none transition-colors cursor-not-allowed opacity-70"
+                          placeholder="Calculado automáticamente"
+                        />
+                      </div>
+                      <Input
+                        label="Peso (ton)"
+                        type="number"
+                        value={formData.cargoWeight}
+                        onChange={(e) => handleInputChange('cargoWeight', parseFloat(e.target.value) || 0)}
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
             <div className="glass-panel border border-white/5 rounded-2xl p-4 md:p-6 animate-slide-up" style={{ animationDelay: '0.1s' }}>
               <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                <Truck className="w-5 h-5 text-accent-500" /> Asignación de Recursos
+                <Truck className="w-5 h-5 text-accent-500" /> Asignación de Recursos y Cotización
               </h3>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -242,21 +282,10 @@ const RouteBuilder: React.FC = () => {
                     {availableVehicles.map(v => <option key={v} value={v}>{v}</option>)}
                   </select>
                 </div>
-              </div>
-            </div>
 
-            <div className="glass-panel border border-white/5 rounded-2xl p-4 md:p-6 animate-slide-up" style={{ animationDelay: '0.2s' }}>
-              <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                <DollarSign className="w-5 h-5 text-green-500" /> Estructura de Costos
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <Input label="Costo Combustible (CLP/km)" type="number" value={formData.fuelCostPerKm} onChange={(e) => handleInputChange('fuelCostPerKm', parseFloat(e.target.value) || 0)} />
-                <Input label="Peajes Totales (CLP)" type="number" value={formData.tollCosts} onChange={(e) => handleInputChange('tollCosts', parseFloat(e.target.value) || 0)} />
-                <Input label="Salario Conductor (CLP)" type="number" value={formData.driverWage} onChange={(e) => handleInputChange('driverWage', parseFloat(e.target.value) || 0)} />
-                <Input label="Seguro (CLP)" type="number" value={formData.insuranceCost} onChange={(e) => handleInputChange('insuranceCost', parseFloat(e.target.value) || 0)} />
-                <Input label="Mantención (CLP)" type="number" value={formData.maintenanceCost} onChange={(e) => handleInputChange('maintenanceCost', parseFloat(e.target.value) || 0)} />
-                <Input label="Cotización Cliente (CLP) *" type="number" value={formData.clientQuote} onChange={(e) => handleInputChange('clientQuote', parseFloat(e.target.value) || 0)} />
+                <div className="md:col-span-2">
+                  <Input label="Cotización Cliente (CLP) *" type="number" value={formData.clientQuote} onChange={(e) => handleInputChange('clientQuote', parseFloat(e.target.value) || 0)} />
+                </div>
               </div>
             </div>
 
@@ -321,75 +350,15 @@ const RouteBuilder: React.FC = () => {
             {analysis && (
               <>
                 <div className="glass-panel border border-white/5 rounded-2xl p-6 animate-slide-up relative overflow-hidden">
-                  <div className={`absolute top-0 left-0 w-1 h-full ${analysis.profit > 0 ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                  <div className="absolute top-0 left-0 w-1 h-full bg-brand-500"></div>
 
-                  <h3 className="text-sm font-bold text-slate-400 uppercase mb-4">Resultado Financiero</h3>
+                  <h3 className="text-sm font-bold text-slate-400 uppercase mb-4">Resumen de Cotización</h3>
 
                   <div className="mb-6">
-                    <span className="text-xs text-slate-500 uppercase tracking-wider">Utilidad Neta</span>
-                    <div className={`text-4xl font-bold mt-1 ${analysis.profit > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                      ${analysis.profit.toLocaleString()} CLP
+                    <span className="text-xs text-slate-500 uppercase tracking-wider">Precio Estimado</span>
+                    <div className="text-4xl font-bold mt-1 text-white">
+                      ${analysis.revenue.toLocaleString()} CLP
                     </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div className="bg-white/5 p-3 rounded-lg border border-white/5">
-                      <p className="text-xs text-slate-500 uppercase">Ingresos</p>
-                      <p className="text-lg font-bold text-white">${analysis.revenue.toLocaleString()}</p>
-                    </div>
-                    <div className="bg-white/5 p-3 rounded-lg border border-white/5">
-                      <p className="text-xs text-slate-500 uppercase">Costos</p>
-                      <p className="text-lg font-bold text-white">${analysis.totalCosts.toLocaleString()}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 bg-brand-900/20 rounded-lg border border-brand-500/30">
-                    <span className="text-sm font-bold text-brand-400">Margen de Utilidad</span>
-                    <span className={`text-2xl font-bold ${analysis.profitMargin > 20 ? 'text-green-400' : analysis.profitMargin > 10 ? 'text-yellow-400' : 'text-red-400'}`}>
-                      {analysis.profitMargin}%
-                    </span>
-                  </div>
-                </div>
-
-                <div className="glass-panel border border-white/5 rounded-2xl p-6 animate-slide-up" style={{ animationDelay: '0.1s' }}>
-                  <h3 className="text-sm font-bold text-slate-400 uppercase mb-4">Desglose de Costos</h3>
-
-                  <div className="space-y-3">
-                    {Object.entries(analysis.breakdownCosts).map(([key, value]) => {
-                      const percentage = ((value / analysis.totalCosts) * 100).toFixed(1);
-                      const icons: any = {
-                        fuel: <Fuel className="w-4 h-4" />,
-                        tolls: <MapPin className="w-4 h-4" />,
-                        driver: <Truck className="w-4 h-4" />,
-                        insurance: <AlertCircle className="w-4 h-4" />,
-                        maintenance: <CheckCircle2 className="w-4 h-4" />,
-                      };
-                      const labels: any = {
-                        fuel: 'Combustible',
-                        tolls: 'Peajes',
-                        driver: 'Conductor',
-                        insurance: 'Seguro',
-                        maintenance: 'Mantención',
-                      };
-
-                      return (
-                        <div key={key}>
-                          <div className="flex items-center justify-between text-sm mb-1">
-                            <span className="flex items-center gap-2 text-slate-300">
-                              {icons[key]}
-                              {labels[key]}
-                            </span>
-                            <span className="font-mono text-white">${value.toLocaleString()}</span>
-                          </div>
-                          <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-gradient-to-r from-brand-500 to-accent-500 rounded-full"
-                              style={{ width: `${percentage}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                      );
-                    })}
                   </div>
                 </div>
 
@@ -414,10 +383,10 @@ const RouteBuilder: React.FC = () => {
           </div>
         </div>
 
-        {savedRoutes.length > 0 && (
+        {registeredRoutes.length > 0 && (
           <div className="mt-12 glass-panel border border-white/5 rounded-2xl overflow-hidden animate-fade-in">
             <div className="p-6 border-b border-white/5 flex justify-between items-center">
-              <h3 className="text-lg font-bold text-white">Rutas Guardadas ({savedRoutes.length})</h3>
+              <h3 className="text-lg font-bold text-white">Rutas Guardadas ({registeredRoutes.length})</h3>
               <span className="text-xs text-slate-500 font-mono">ULTIMAS 10 RUTAS</span>
             </div>
             <div className="overflow-x-auto">
@@ -425,43 +394,168 @@ const RouteBuilder: React.FC = () => {
                 <thead className="bg-white/5 text-xs uppercase text-slate-400">
                   <tr>
                     <th className="p-4">Ruta</th>
-                    <th className="p-4">Conductor</th>
-                    <th className="p-4 text-right">Ingreso</th>
-                    <th className="p-4 text-right">Costo</th>
-                    <th className="p-4 text-right">Utilidad</th>
-                    <th className="p-4 text-right">Margen</th>
-                    <th className="p-4">Fecha</th>
+                    <th className="p-4">Vehículo</th>
+                    <th className="p-4 text-right">Cotización</th>
+                    <th className="p-4">Estado</th>
+                    <th className="p-4 text-center">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {savedRoutes.slice(0, 10).map((route) => (
-                    <tr key={route.id} className="hover:bg-white/5 transition-colors">
+                  {registeredRoutes.slice(0, 10).map((route) => (
+                    <tr key={route.id} className="hover:bg-white/5 transition-colors cursor-pointer" onClick={() => setSelectedRoute(route)}>
                       <td className="p-4">
-                        <p className="text-white font-medium">{route.origin} → {route.destination}</p>
-                        <p className="text-xs text-slate-500">{route.distance} km</p>
+                        <p className="text-white font-medium">{route.origin.split(',')[0]} → {route.destination.split(',')[0]}</p>
+                        <p className="text-xs text-slate-500">{route.distance}</p>
                       </td>
-                      <td className="p-4 text-slate-400">{route.driver}</td>
-                      <td className="p-4 text-right font-mono text-slate-300">${route.revenue.toLocaleString()}</td>
-                      <td className="p-4 text-right font-mono text-slate-300">${route.totalCosts.toLocaleString()}</td>
-                      <td className="p-4 text-right font-mono">
-                        <span className={route.profit > 0 ? 'text-green-400' : 'text-red-400'}>
-                          ${route.profit.toLocaleString()}
-                        </span>
-                      </td>
-                      <td className="p-4 text-right">
-                        <span className={`font-bold ${route.profitMargin > 20 ? 'text-green-400' :
-                          route.profitMargin > 10 ? 'text-yellow-400' : 'text-red-400'
+                      <td className="p-4 text-slate-400">{route.vehicleType}</td>
+                      <td className="p-4 text-right font-mono text-slate-300">{route.estimatedPrice}</td>
+                      <td className="p-4">
+                        <span className={`px-2 py-1 text-xs rounded font-bold ${route.status === 'Completed' ? 'bg-green-500/10 text-green-400 border border-green-500/20' :
+                            route.status === 'In Progress' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
+                              'bg-slate-800 text-slate-400 border border-slate-700'
                           }`}>
-                          {route.profitMargin}%
+                          {route.status === 'Pending' ? 'Pendiente' : route.status === 'In Progress' ? 'En Curso' : 'Completada'}
                         </span>
                       </td>
-                      <td className="p-4 text-slate-500 text-sm">
-                        {new Date(route.createdAt).toLocaleDateString('es-CL')}
+                      <td className="p-4">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedRoute(route);
+                          }}
+                          className="p-2 hover:bg-brand-500/10 text-slate-400 hover:text-brand-400 rounded transition-colors"
+                          title="Ver detalles"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Detalles de Ruta */}
+        {selectedRoute && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedRoute(null)}>
+            <div className="relative w-full max-w-3xl glass-panel border border-white/10 rounded-2xl overflow-hidden animate-slide-up" onClick={(e) => e.stopPropagation()}>
+              {/* Header */}
+              <div className="p-6 border-b border-white/5 flex justify-between items-center bg-gradient-to-r from-brand-500/10 to-accent-500/10">
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Detalles de Ruta</h2>
+                  <p className="text-xs text-slate-400 font-mono mt-1">ID: {selectedRoute.id}</p>
+                </div>
+                <button
+                  onClick={() => setSelectedRoute(null)}
+                  className="p-2 hover:bg-white/10 text-slate-400 hover:text-white rounded-lg transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                {/* Origen y Destino */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                    <div className="flex items-center gap-2 mb-2">
+                      <MapPin className="w-4 h-4 text-green-400" />
+                      <span className="text-xs font-bold text-slate-400 uppercase">Origen</span>
+                    </div>
+                    <p className="text-white font-medium">{selectedRoute.origin}</p>
+                  </div>
+                  <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                    <div className="flex items-center gap-2 mb-2">
+                      <MapPin className="w-4 h-4 text-red-400" />
+                      <span className="text-xs font-bold text-slate-400 uppercase">Destino</span>
+                    </div>
+                    <p className="text-white font-medium">{selectedRoute.destination}</p>
+                  </div>
+                </div>
+
+                {/* Información General */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="p-4 bg-gradient-to-br from-brand-500/10 to-brand-500/5 rounded-xl border border-brand-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <MapPin className="w-4 h-4 text-brand-400" />
+                      <span className="text-xs font-bold text-slate-400 uppercase">Distancia</span>
+                    </div>
+                    <p className="text-xl font-bold text-white">{selectedRoute.distance}</p>
+                  </div>
+                  <div className="p-4 bg-gradient-to-br from-green-500/10 to-green-500/5 rounded-xl border border-green-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <DollarSign className="w-4 h-4 text-green-400" />
+                      <span className="text-xs font-bold text-slate-400 uppercase">Cotización</span>
+                    </div>
+                    <p className="text-xl font-bold text-white">{selectedRoute.estimatedPrice}</p>
+                  </div>
+                  <div className="p-4 bg-gradient-to-br from-blue-500/10 to-blue-500/5 rounded-xl border border-blue-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Truck className="w-4 h-4 text-blue-400" />
+                      <span className="text-xs font-bold text-slate-400 uppercase">Vehículo</span>
+                    </div>
+                    <p className="text-sm font-bold text-white">{selectedRoute.vehicleType}</p>
+                  </div>
+                  <div className="p-4 bg-gradient-to-br from-purple-500/10 to-purple-500/5 rounded-xl border border-purple-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <User className="w-4 h-4 text-purple-400" />
+                      <span className="text-xs font-bold text-slate-400 uppercase">Conductor</span>
+                    </div>
+                    <p className="text-sm font-bold text-white">{selectedRoute.driver || 'No asignado'}</p>
+                  </div>
+                </div>
+
+                {/* Estado y Fecha */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                    <div className="flex items-center gap-2 mb-3">
+                      <AlertCircle className="w-4 h-4 text-slate-400" />
+                      <span className="text-xs font-bold text-slate-400 uppercase">Estado de la Ruta</span>
+                    </div>
+                    <select
+                      value={selectedRoute.status}
+                      onChange={(e) => {
+                        const newStatus = e.target.value as 'Pending' | 'In Progress' | 'Completed';
+                        updateRouteStatus(selectedRoute.id, newStatus);
+                        setSelectedRoute({ ...selectedRoute, status: newStatus });
+                      }}
+                      className="w-full bg-dark-900 border border-white/10 rounded-lg px-4 py-2.5 text-white font-medium focus:ring-2 focus:ring-brand-500 outline-none transition-colors cursor-pointer"
+                    >
+                      <option value="Pending" className="bg-dark-900">🟡 Pendiente</option>
+                      <option value="In Progress" className="bg-dark-900">🔵 En Curso</option>
+                      <option value="Completed" className="bg-dark-900">✅ Completada</option>
+                    </select>
+                  </div>
+                  <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Calendar className="w-4 h-4 text-slate-400" />
+                      <span className="text-xs font-bold text-slate-400 uppercase">Fecha de Creación</span>
+                    </div>
+                    <p className="text-white font-medium">
+                      {new Date(selectedRoute.timestamp).toLocaleDateString('es-CL', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Acciones */}
+                <div className="flex gap-3 pt-4 border-t border-white/10">
+                  <button className="flex-1 px-4 py-3 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-bold transition-colors flex items-center justify-center gap-2">
+                    <Download className="w-4 h-4" />
+                    Exportar PDF
+                  </button>
+                  <button className="flex-1 px-4 py-3 bg-white/5 hover:bg-white/10 text-white border border-white/10 rounded-xl font-bold transition-colors">
+                    Editar Ruta
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}

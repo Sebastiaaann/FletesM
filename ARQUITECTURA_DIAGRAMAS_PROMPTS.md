@@ -1,4 +1,4 @@
-# FleetMaster – Prompts y Diagramas de Arquitectura (Mermaid)
+# FleetTech – Prompts y Diagramas de Arquitectura (Mermaid)
 
 Este documento incluye:
 - Prompts listos para pedir a un modelo/IA que genere o refine diagramas.
@@ -7,7 +7,7 @@ Este documento incluye:
 
 ## 1. Prompt General de Arquitectura Lógica
 ```
-Genera un diagrama Mermaid que muestre la arquitectura lógica de FleetMaster.
+Genera un diagrama Mermaid que muestre la arquitectura lógica de FleetTech.
 Incluye: Usuario Web, Frontend (React + Vite), Estado (Zustand), Servicios (Supabase: Auth, DB, Realtime), Servicio IA (Gemini API), Mapa (Leaflet/OpenStreetMap), Gestión de Rutas, Módulo Compliance, Módulo Finanzas y Futuro: Motor de Optimización y Mantenimiento Predictivo. Agrupa por capas: Presentación, Lógica, Datos, IA/Servicios Externos.
 ```
 
@@ -53,7 +53,7 @@ flowchart LR
 
 ## 2. Prompt de Arquitectura Física / Despliegue
 ```
-Genera un diagrama Mermaid de despliegue para FleetMaster: Cliente Web (Browser), CDN, Hosting (Vercel/Netlify), Supabase (Postgres + Auth + Realtime), API Gemini, Futuro cluster Docker/Kubernetes para microservicios de optimización y mantenimiento. Muestra conexiones seguras HTTPS y direcciones lógicas.
+Genera un diagrama Mermaid de despliegue para FleetTech: Cliente Web (Browser), CDN, Hosting (Vercel/Netlify), Supabase (Postgres + Auth + Realtime), API Gemini, Futuro cluster Docker/Kubernetes para microservicios de optimización y mantenimiento. Muestra conexiones seguras HTTPS y direcciones lógicas.
 ```
 
 ```mermaid
@@ -142,7 +142,7 @@ Genera diagrama Mermaid mostrando roadmap por fases: MVP (Tracking básico, Coti
 ```mermaid
 gantt
   dateFormat  YYYY-MM-DD
-  title Roadmap Evolutivo FleetMaster
+  title Roadmap Evolutivo FleetTech
   section MVP
   Tracking Básico & Cotizador IA     :done, m1, 2025-09-01,2025-10-15
   section Fase 2

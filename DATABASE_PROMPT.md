@@ -1,12 +1,12 @@
-# Prompt para Diseño de Base de Datos - FleetMaster
+# Prompt para Diseño de Base de Datos - FleetTech
 
 ## Contexto del Proyecto
 
-Soy desarrollador de **FleetMaster**, un sistema de gestión de flotas de transporte con inteligencia artificial. La aplicación está construida con React + TypeScript y actualmente usa datos mock. Necesito diseñar una base de datos completa y escalable.
+Soy desarrollador de **FleetTech**, un sistema de gestión de flotas de transporte con inteligencia artificial. La aplicación está construida con React + TypeScript y actualmente usa datos mock. Necesito diseñar una base de datos completa y escalable.
 
 ## Descripción del Sistema
 
-FleetMaster es una plataforma logística que permite:
+FleetTech es una plataforma logística que permite:
 
 1. **Gestión de Flota**: Administrar vehículos, conductores y su estado operacional
 2. **Rastreo GPS**: Monitoreo en tiempo real de ubicaciones

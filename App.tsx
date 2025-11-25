@@ -19,6 +19,7 @@ const RouteBuilder = React.lazy(() => import('./components/RouteBuilder'));
 const Financials = React.lazy(() => import('./components/Financials'));
 const Compliance = React.lazy(() => import('./components/Compliance'));
 const FleetTracking = React.lazy(() => import('./components/FleetTracking'));
+const DriverMobile = React.lazy(() => import('./components/DriverMobile'));
 
 import { AppView } from './types';
 
@@ -44,6 +45,8 @@ const App: React.FC = () => {
         return <Financials />;
       case AppView.COMPLIANCE:
         return <Compliance />;
+      case AppView.DRIVER_MOBILE:
+        return <DriverMobile />;
       default:
         return <Hero />;
     }
@@ -64,7 +67,7 @@ const App: React.FC = () => {
       {/* Footer */}
       <footer className="bg-black border-t border-white/5 py-8">
         <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center text-slate-600 text-sm">
-          <p>© 2024 FleetMaster Corp. Todos los derechos reservados.</p>
+          <p>© 2024 FleetTech Corp. Todos los derechos reservados.</p>
           <div className="flex gap-6 mt-4 md:mt-0">
             <span className="hover:text-white cursor-pointer transition-colors">Privacidad</span>
             <span className="hover:text-white cursor-pointer transition-colors">Seguridad</span>

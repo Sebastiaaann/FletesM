@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Driver, Vehicle, MaintenancePrediction } from '../types';
 import { predictMaintenance } from '../services/geminiService';
-import { vehicleService } from '../services/vehicleService';
-import { Search, Plus, User, Truck, AlertTriangle, X, Save, Trash2, Edit2, Zap, Activity, Thermometer, Loader2 } from 'lucide-react';
+import { Search, Plus, User, Truck, AlertTriangle, X, Save, Trash2, Edit2, Zap, Activity, Thermometer } from 'lucide-react';
 import showToast from './Toast';
 import LoadingButton from './LoadingButton';
 import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '../utils/errorMessages';
