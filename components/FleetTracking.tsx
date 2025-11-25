@@ -3,6 +3,8 @@ import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { analyzeRouteRisks } from '../services/geminiService';
 import { MapPin, Navigation, Activity, Satellite, Loader2, AlertTriangle, FileText } from 'lucide-react';
 import MapSkeleton from './MapSkeleton';
+import { vehicleService } from '../services/databaseService';
+import type { Vehicle } from '../types';
 
 // Lazy load map
 const TrackingMap = lazy(() => import('./TrackingMap'));
@@ -81,41 +83,70 @@ const FormattedAnalysis = ({ text }: { text: string }) => {
     );
 };
 
+interface TruckData {
+    id: string;
+    location: string;
+    coords: [number, number];
+    status: string;
+    destination: string;
+    load: number;
+    driver: string;
+    plate: string;
+    model: string;
+}
+
 const FleetTracking: React.FC = () => {
     const [analysis, setAnalysis] = useState<string>("");
     const [loading, setLoading] = useState(false);
+    const [loadingVehicles, setLoadingVehicles] = useState(true);
     const [selectedTruckId, setSelectedTruckId] = useState<string | null>(null);
+    const [trucks, setTrucks] = useState<TruckData[]>([]);
 
-    // Mock Data - Updated with Coordinates for Southern Chile
-    const trucks = [
-        {
-            id: "TRK-882",
-            location: "Puerto Montt, Los Lagos",
-            coords: [-41.4689, -72.9411] as [number, number],
-            status: "In Transit",
-            destination: "Osorno, Los Lagos",
-            load: 85,
-            driver: "Carlos M."
-        },
-        {
-            id: "TRK-104",
-            location: "Castro, Chiloé",
-            coords: [-42.4721, -73.7732] as [number, number],
-            status: "Warning",
-            destination: "Ancud, Chiloé",
-            load: 40,
-            driver: "Ana S."
-        },
-        {
-            id: "TRK-339",
-            location: "Valdivia, Los Ríos",
-            coords: [-39.8196, -73.2452] as [number, number],
-            status: "In Transit",
-            destination: "Puerto Varas, Los Lagos",
-            load: 92,
-            driver: "Jorge O."
-        },
-    ];
+    // Cargar vehículos desde Supabase
+    useEffect(() => {
+        loadVehicles();
+        
+        // Escuchar cambios en tiempo real
+        const handleVehicleChange = () => loadVehicles();
+        window.addEventListener('vehicle-change', handleVehicleChange);
+        
+        return () => {
+            window.removeEventListener('vehicle-change', handleVehicleChange);
+        };
+    }, []);
+
+    const loadVehicles = async () => {
+        setLoadingVehicles(true);
+        try {
+            const vehicles = await vehicleService.getAll();
+            
+            // Convertir vehículos de Supabase al formato del mapa
+            const trucksData: TruckData[] = vehicles
+                .filter(v => v.status === 'Active' && v.locationLat && v.locationLng)
+                .map(v => ({
+                    id: v.id,
+                    plate: v.plate,
+                    model: v.model,
+                    location: v.city || `${v.locationLat?.toFixed(4)}, ${v.locationLng?.toFixed(4)}`,
+                    coords: [v.locationLat!, v.locationLng!] as [number, number],
+                    status: v.mileage && v.mileage > 150000 ? 'Warning' : 'In Transit',
+                    destination: 'En ruta', // Podemos mejorarlo más adelante
+                    load: v.fuelLevel || 0,
+                    driver: 'Asignado' // Podemos relacionarlo con drivers más adelante
+                }));
+            
+            setTrucks(trucksData);
+            
+            // Seleccionar el primer vehículo si no hay ninguno seleccionado
+            if (!selectedTruckId && trucksData.length > 0) {
+                setSelectedTruckId(trucksData[0].id);
+            }
+        } catch (error) {
+            console.error('Error loading vehicles:', error);
+        } finally {
+            setLoadingVehicles(false);
+        }
+    };
 
     const activeTruck = trucks.find(t => t.id === selectedTruckId) || trucks[0];
 
@@ -128,11 +159,11 @@ const FleetTracking: React.FC = () => {
     };
 
     useEffect(() => {
-        // Initial analysis
-        if (!selectedTruckId) {
+        // Initial analysis cuando hay vehículos cargados
+        if (!selectedTruckId && trucks.length > 0 && !loadingVehicles) {
             handleAnalyze(trucks[0].location, trucks[0].destination, trucks[0].id);
         }
-    }, []);
+    }, [trucks, loadingVehicles]);
 
     return (
         <div className="min-h-screen pt-24 px-4 bg-dark-950 pb-10">
@@ -162,44 +193,66 @@ const FleetTracking: React.FC = () => {
                     {/* Left Column: Vehicle List */}
                     <div className="col-span-1 space-y-4 h-[680px] overflow-y-auto pr-2 custom-scrollbar">
                         <h3 className="text-slate-400 text-xs uppercase font-bold mb-2">Flota en Ruta</h3>
-                        {trucks.map((truck) => (
-                            <div
-                                key={truck.id}
-                                onClick={() => handleAnalyze(truck.location, truck.destination, truck.id)}
-                                className={`p-5 rounded-xl border cursor-pointer transition-all relative overflow-hidden ${selectedTruckId === truck.id
-                                        ? 'bg-white/10 border-brand-500 shadow-[0_0_15px_rgba(34,197,94,0.1)]'
-                                        : 'bg-slate-900 border-slate-800 hover:border-slate-600'
-                                    }`}
-                            >
-                                <div className="flex justify-between items-start mb-3 relative z-10">
-                                    <div>
-                                        <h3 className="text-white font-mono font-bold text-lg">{truck.id}</h3>
-                                        <p className="text-xs text-slate-500">{truck.driver}</p>
-                                    </div>
-                                    <span className={`text-xs px-2 py-1 rounded border ${truck.status === 'Warning' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-green-500/10 text-green-400 border-green-500/20'
-                                        }`}>
-                                        {truck.status === 'Warning' ? 'Alerta' : 'En Tránsito'}
-                                    </span>
+                        
+                        {loadingVehicles ? (
+                            <div className="flex items-center justify-center py-12">
+                                <div className="text-center">
+                                    <Loader2 className="w-8 h-8 text-brand-500 animate-spin mx-auto mb-2" />
+                                    <p className="text-slate-400 text-sm">Cargando vehículos...</p>
                                 </div>
-                                <div className="space-y-2 relative z-10">
-                                    <div className="flex items-center gap-2 text-sm text-slate-300">
-                                        <MapPin className="w-4 h-4 text-brand-500" /> {truck.location}
-                                    </div>
-                                    <div className="flex items-center gap-2 text-sm text-slate-400">
-                                        <Navigation className="w-4 h-4" /> {truck.destination}
-                                    </div>
-                                </div>
-                                {selectedTruckId === truck.id && (
-                                    <div className="absolute bottom-0 right-0 p-2">
-                                        <Activity className="w-12 h-12 text-brand-500/10" />
-                                    </div>
-                                )}
                             </div>
-                        ))}
+                        ) : trucks.length === 0 ? (
+                            <div className="p-6 rounded-xl border border-dashed border-white/10 bg-white/5 text-center">
+                                <AlertTriangle className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+                                <p className="text-slate-400 text-sm">No hay vehículos activos con ubicación GPS</p>
+                                <p className="text-slate-500 text-xs mt-2">
+                                    Configura las coordenadas en el Administrador de Flota
+                                </p>
+                            </div>
+                        ) : (
+                            trucks.map((truck) => (
+                                <div
+                                    key={truck.id}
+                                    onClick={() => handleAnalyze(truck.location, truck.destination, truck.id)}
+                                    className={`p-5 rounded-xl border cursor-pointer transition-all relative overflow-hidden ${selectedTruckId === truck.id
+                                            ? 'bg-white/10 border-brand-500 shadow-[0_0_15px_rgba(34,197,94,0.1)]'
+                                            : 'bg-slate-900 border-slate-800 hover:border-slate-600'
+                                        }`}
+                                >
+                                    <div className="flex justify-between items-start mb-3 relative z-10">
+                                        <div>
+                                            <h3 className="text-white font-mono font-bold text-lg">{truck.plate}</h3>
+                                            <p className="text-xs text-slate-500">{truck.model}</p>
+                                        </div>
+                                        <span className={`text-xs px-2 py-1 rounded border ${truck.status === 'Warning' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-green-500/10 text-green-400 border-green-500/20'
+                                            }`}>
+                                            {truck.status === 'Warning' ? 'Alerta' : 'En Tránsito'}
+                                        </span>
+                                    </div>
+                                    <div className="space-y-2 relative z-10">
+                                        <div className="flex items-center gap-2 text-sm text-slate-300">
+                                            <MapPin className="w-4 h-4 text-brand-500" /> {truck.location}
+                                        </div>
+                                        <div className="flex items-center gap-2 text-sm text-slate-400">
+                                            <Activity className="w-4 h-4" /> Combustible: {truck.load}%
+                                        </div>
+                                    </div>
+                                    {selectedTruckId === truck.id && (
+                                        <div className="absolute bottom-0 right-0 p-2">
+                                            <Activity className="w-12 h-12 text-brand-500/10" />
+                                        </div>
+                                    )}
+                                </div>
+                            ))
+                        )}
 
-                        <div className="p-4 rounded-xl border border-dashed border-white/10 bg-white/5 text-center mt-4">
-                            <p className="text-xs text-slate-500">Mostrando 3 de 24 vehículos activos</p>
-                        </div>
+                        {!loadingVehicles && trucks.length > 0 && (
+                            <div className="p-4 rounded-xl border border-dashed border-white/10 bg-white/5 text-center mt-4">
+                                <p className="text-xs text-slate-500">
+                                    Mostrando {trucks.length} vehículo{trucks.length !== 1 ? 's' : ''} activo{trucks.length !== 1 ? 's' : ''} con GPS
+                                </p>
+                            </div>
+                        )}
                     </div>
 
                     {/* Right Column: Map & Analysis Panel */}
@@ -216,12 +269,14 @@ const FleetTracking: React.FC = () => {
                                 </Suspense>
 
                                 {/* Floating Truck Info Overlay */}
-                                <div className="absolute top-4 right-4 z-[500]">
-                                    <div className="bg-black/80 text-white text-xs px-3 py-2 rounded-lg backdrop-blur-md border border-white/10 shadow-lg flex items-center gap-2">
-                                        <div className="w-2 h-2 bg-brand-500 rounded-full animate-pulse"></div>
-                                        {activeTruck.id}
+                                {activeTruck && (
+                                    <div className="absolute top-4 right-4 z-[500]">
+                                        <div className="bg-black/80 text-white text-xs px-3 py-2 rounded-lg backdrop-blur-md border border-white/10 shadow-lg flex items-center gap-2">
+                                            <div className="w-2 h-2 bg-brand-500 rounded-full animate-pulse"></div>
+                                            {activeTruck.plate} - {activeTruck.model}
+                                        </div>
                                     </div>
-                                </div>
+                                )}
                             </div>
                         </div>
 
@@ -240,11 +295,13 @@ const FleetTracking: React.FC = () => {
                                                 Informe de Riesgo de Ruta
                                                 <span className="px-2 py-0.5 text-[10px] bg-white/10 rounded-full text-slate-400 font-mono uppercase">Gemini 2.5 Flash</span>
                                             </h3>
-                                            <p className="text-slate-500 text-xs font-mono mt-1">
-                                                CONTEXTO: {activeTruck.location.toUpperCase()} &rarr; {activeTruck.destination.toUpperCase()}
-                                            </p>
+                                            {activeTruck && (
+                                                <p className="text-slate-500 text-xs font-mono mt-1">
+                                                    VEHÍCULO: {activeTruck.plate} ({activeTruck.model}) | GPS: {activeTruck.location}
+                                                </p>
+                                            )}
                                         </div>
-                                        {!loading && (
+                                        {!loading && activeTruck && (
                                             <button onClick={() => handleAnalyze(activeTruck.location, activeTruck.destination, activeTruck.id)} className="p-2 hover:bg-white/5 rounded-full text-slate-400 hover:text-white transition-colors" title="Regenerar Análisis">
                                                 <Activity className="w-4 h-4" />
                                             </button>

@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { generateSmartQuote } from '../services/geminiService';
 import { MapPin, Truck, DollarSign, Save, Calculator, Zap, AlertCircle, CheckCircle2, Loader2, PieChart, Fuel, FileText, Download, Eye, X, Calendar, User } from 'lucide-react';
 import AddressAutocomplete from './AddressAutocomplete';
-import showToast from './Toast';
+import { showToast } from './Toast';
 import LoadingButton from './LoadingButton';
 import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '../utils/errorMessages';
 import { useStore } from '../store/useStore';
+import { driverService, vehicleService } from '../services/databaseService';
+import type { Driver, Vehicle } from '../types';
 
 interface RouteFormData {
   origin: string;
@@ -27,6 +29,10 @@ interface RouteAnalysis {
 const RouteBuilder: React.FC = () => {
   const { pendingRouteData, clearPendingRouteData, addRoute, registeredRoutes, updateRouteStatus } = useStore();
 
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+
   const [formData, setFormData] = useState<RouteFormData>({
     origin: '',
     destination: '',
@@ -41,6 +47,39 @@ const RouteBuilder: React.FC = () => {
   const [originCoords, setOriginCoords] = useState<[number, number] | null>(null);
   const [destCoords, setDestCoords] = useState<[number, number] | null>(null);
   const [selectedRoute, setSelectedRoute] = useState<any | null>(null);
+
+  // Cargar conductores y vehículos desde Supabase
+  useEffect(() => {
+    loadData();
+    
+    // Escuchar cambios en tiempo real
+    const handleVehicleChange = () => loadData();
+    const handleDriverChange = () => loadData();
+    
+    window.addEventListener('vehicle-change', handleVehicleChange);
+    window.addEventListener('driver-change', handleDriverChange);
+    
+    return () => {
+      window.removeEventListener('vehicle-change', handleVehicleChange);
+      window.removeEventListener('driver-change', handleDriverChange);
+    };
+  }, []);
+
+  const loadData = async () => {
+    setLoadingData(true);
+    try {
+      const [driversData, vehiclesData] = await Promise.all([
+        driverService.getAll(),
+        vehicleService.getAll()
+      ]);
+      setDrivers(driversData.filter(d => d.status === 'Available' || d.status === 'On Route'));
+      setVehicles(vehiclesData.filter(v => v.status === 'Active'));
+    } catch (error) {
+      console.error('Error loading data:', error);
+    } finally {
+      setLoadingData(false);
+    }
+  };
 
   React.useEffect(() => {
     if (pendingRouteData) {
@@ -90,9 +129,6 @@ const RouteBuilder: React.FC = () => {
   const [aiInsight, setAiInsight] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-
-  const availableDrivers = ['Carlos Mendoza', 'Ana Silva', 'Jorge O\'Ryan', 'Luis Toro'];
-  const availableVehicles = ['HG-LF-99 (Volvo FH16)', 'JS-KK-22 (Scania R450)', 'LK-MM-11 (Mercedes Actros)'];
 
   const handleInputChange = (field: keyof RouteFormData, value: any) => {
     setFormData({ ...formData, [field]: value });
@@ -265,9 +301,10 @@ const RouteBuilder: React.FC = () => {
                     value={formData.driver}
                     onChange={(e) => handleInputChange('driver', e.target.value)}
                     className="w-full bg-dark-900 border border-white/10 rounded-xl p-3 text-white focus:ring-2 focus:ring-brand-500 outline-none"
+                    disabled={loadingData}
                   >
-                    <option value="">Seleccionar...</option>
-                    {availableDrivers.map(d => <option key={d} value={d}>{d}</option>)}
+                    <option value="">{loadingData ? 'Cargando...' : 'Seleccionar...'}</option>
+                    {drivers.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
                   </select>
                 </div>
 
@@ -277,9 +314,10 @@ const RouteBuilder: React.FC = () => {
                     value={formData.vehicle}
                     onChange={(e) => handleInputChange('vehicle', e.target.value)}
                     className="w-full bg-dark-900 border border-white/10 rounded-xl p-3 text-white focus:ring-2 focus:ring-brand-500 outline-none"
+                    disabled={loadingData}
                   >
-                    <option value="">Seleccionar...</option>
-                    {availableVehicles.map(v => <option key={v} value={v}>{v}</option>)}
+                    <option value="">{loadingData ? 'Cargando...' : 'Seleccionar...'}</option>
+                    {vehicles.map(v => <option key={v.id} value={`${v.plate} - ${v.model}`}>{v.plate} - {v.model}</option>)}
                   </select>
                 </div>
 

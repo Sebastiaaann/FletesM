@@ -1,6 +1,41 @@
 import { supabase } from './supabaseClient';
 import { Vehicle, Driver } from '../types';
 
+// Tipos para las tablas de Supabase
+interface RouteDB {
+  id: string;
+  origin: string;
+  destination: string;
+  distance: string;
+  estimated_price: string;
+  vehicle_type: string;
+  driver?: string;
+  vehicle?: string;
+  timestamp: number;
+  status: 'Pending' | 'In Progress' | 'Completed';
+}
+
+interface VehicleDB {
+  id: string;
+  plate: string;
+  model: string;
+  status: 'Active' | 'Maintenance' | 'Idle';
+  mileage: number;
+  fuel_level: number;
+  next_service: string;
+  location_lat?: number;
+  location_lng?: number;
+}
+
+interface DriverDB {
+  id: string;
+  name: string;
+  rut: string;
+  license_type: string;
+  license_expiry: string;
+  status: 'Available' | 'On Route' | 'Off Duty';
+}
+
 // ============================================
 // VEHICLES - CRUD Operations
 // ============================================
@@ -14,26 +49,43 @@ export const vehicleService = {
       .order('created_at', { ascending: false });
     
     if (error) throw error;
-    return data;
-  },
-
-  // Obtener vehículo por ID
-  async getById(id: string) {
-    const { data, error } = await supabase
-      .from('vehicles')
-      .select('*')
-      .eq('id', id)
-      .single();
     
-    if (error) throw error;
-    return data;
+    // Transformar de snake_case (DB) a camelCase (App)
+    return data?.map(v => ({
+      id: v.id,
+      plate: v.plate,
+      model: v.model,
+      status: v.status,
+      mileage: v.mileage,
+      fuelLevel: v.fuel_level,
+      nextService: v.next_service,
+      city: v.city,
+      location: v.location_lat && v.location_lng ? {
+        lat: v.location_lat,
+        lng: v.location_lng
+      } : undefined
+    })) || [];
   },
 
   // Crear nuevo vehículo
-  async create(vehicle: Omit<Vehicle, 'id'>) {
+  async create(vehicle: any) {
+    // Transformar de camelCase (App) a snake_case (DB)
+    const dbVehicle = {
+      id: vehicle.id,
+      plate: vehicle.plate,
+      model: vehicle.model,
+      status: vehicle.status,
+      mileage: vehicle.mileage,
+      fuel_level: vehicle.fuelLevel,
+      next_service: vehicle.nextService,
+      city: vehicle.city,
+      location_lat: vehicle.location?.lat,
+      location_lng: vehicle.location?.lng
+    };
+
     const { data, error } = await supabase
       .from('vehicles')
-      .insert([vehicle])
+      .insert([dbVehicle])
       .select()
       .single();
     
@@ -42,10 +94,22 @@ export const vehicleService = {
   },
 
   // Actualizar vehículo
-  async update(id: string, updates: Partial<Vehicle>) {
+  async update(id: string, updates: any) {
+    // Transformar campos a snake_case
+    const dbUpdates: any = {};
+    if (updates.plate) dbUpdates.plate = updates.plate;
+    if (updates.model) dbUpdates.model = updates.model;
+    if (updates.status) dbUpdates.status = updates.status;
+    if (updates.mileage !== undefined) dbUpdates.mileage = updates.mileage;
+    if (updates.fuelLevel !== undefined) dbUpdates.fuel_level = updates.fuelLevel;
+    if (updates.nextService) dbUpdates.next_service = updates.nextService;
+    if (updates.city) dbUpdates.city = updates.city;
+    if (updates.location?.lat !== undefined) dbUpdates.location_lat = updates.location.lat;
+    if (updates.location?.lng !== undefined) dbUpdates.location_lng = updates.location.lng;
+
     const { data, error } = await supabase
       .from('vehicles')
-      .update(updates)
+      .update(dbUpdates)
       .eq('id', id)
       .select()
       .single();
@@ -54,14 +118,15 @@ export const vehicleService = {
     return data;
   },
 
-  // Eliminar vehículo (soft delete)
+  // Eliminar vehículo
   async delete(id: string) {
     const { error } = await supabase
       .from('vehicles')
-      .update({ deleted_at: new Date().toISOString() })
+      .delete()
       .eq('id', id);
     
     if (error) throw error;
+    return true;
   },
 
   // Obtener vehículos por estado
@@ -86,28 +151,35 @@ export const driverService = {
     const { data, error } = await supabase
       .from('drivers')
       .select('*')
-      .is('deleted_at', null)
       .order('name', { ascending: true });
     
     if (error) throw error;
-    return data;
-  },
-
-  async getById(id: string) {
-    const { data, error } = await supabase
-      .from('drivers')
-      .select('*')
-      .eq('id', id)
-      .single();
     
-    if (error) throw error;
-    return data;
+    // Transformar de snake_case (DB) a camelCase (App)
+    return data?.map(d => ({
+      id: d.id,
+      name: d.name,
+      rut: d.rut,
+      licenseType: d.license_type,
+      licenseExpiry: d.license_expiry,
+      status: d.status
+    })) || [];
   },
 
-  async create(driver: Omit<Driver, 'id'>) {
+  async create(driver: any) {
+    // Transformar de camelCase (App) a snake_case (DB)
+    const dbDriver = {
+      id: driver.id,
+      name: driver.name,
+      rut: driver.rut,
+      license_type: driver.licenseType,
+      license_expiry: driver.licenseExpiry,
+      status: driver.status
+    };
+
     const { data, error } = await supabase
       .from('drivers')
-      .insert([driver])
+      .insert([dbDriver])
       .select()
       .single();
     
@@ -115,10 +187,18 @@ export const driverService = {
     return data;
   },
 
-  async update(id: string, updates: Partial<Driver>) {
+  async update(id: string, updates: any) {
+    // Transformar campos a snake_case
+    const dbUpdates: any = {};
+    if (updates.name) dbUpdates.name = updates.name;
+    if (updates.rut) dbUpdates.rut = updates.rut;
+    if (updates.licenseType) dbUpdates.license_type = updates.licenseType;
+    if (updates.licenseExpiry) dbUpdates.license_expiry = updates.licenseExpiry;
+    if (updates.status) dbUpdates.status = updates.status;
+
     const { data, error } = await supabase
       .from('drivers')
-      .update(updates)
+      .update(dbUpdates)
       .eq('id', id)
       .select()
       .single();
@@ -130,10 +210,11 @@ export const driverService = {
   async delete(id: string) {
     const { error } = await supabase
       .from('drivers')
-      .update({ deleted_at: new Date().toISOString() })
+      .delete()
       .eq('id', id);
     
     if (error) throw error;
+    return true;
   },
 
   // Obtener conductores disponibles
@@ -150,100 +231,8 @@ export const driverService = {
 };
 
 // ============================================
-// ROUTES - CRUD Operations
+// ROUTES - Removed old service (duplicated below)
 // ============================================
-
-export const routeService = {
-  async getAll() {
-    const { data, error } = await supabase
-      .from('routes')
-      .select(`
-        *,
-        driver:drivers(*),
-        vehicle:vehicles(*),
-        cargo:cargo(*),
-        costs:route_costs(*),
-        revenue:route_revenue(*)
-      `)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false });
-    
-    if (error) throw error;
-    return data;
-  },
-
-  async getById(id: string) {
-    const { data, error } = await supabase
-      .from('routes')
-      .select(`
-        *,
-        driver:drivers(*),
-        vehicle:vehicles(*),
-        cargo:cargo(*),
-        costs:route_costs(*),
-        revenue:route_revenue(*),
-        gps_tracking:gps_tracking(*)
-      `)
-      .eq('id', id)
-      .single();
-    
-    if (error) throw error;
-    return data;
-  },
-
-  async create(route: any) {
-    const { data, error } = await supabase
-      .from('routes')
-      .insert([route])
-      .select()
-      .single();
-    
-    if (error) throw error;
-    return data;
-  },
-
-  async update(id: string, updates: any) {
-    const { data, error } = await supabase
-      .from('routes')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
-    
-    if (error) throw error;
-    return data;
-  },
-
-  async delete(id: string) {
-    const { error } = await supabase
-      .from('routes')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', id);
-    
-    if (error) throw error;
-  },
-
-  // Obtener rutas activas
-  async getActive() {
-    const { data, error } = await supabase
-      .from('routes')
-      .select('*, driver:drivers(*), vehicle:vehicles(*)')
-      .in('status', ['planned', 'in_progress'])
-      .is('deleted_at', null);
-    
-    if (error) throw error;
-    return data;
-  },
-
-  // Calcular rentabilidad de una ruta
-  async calculateProfitability(routeId: string) {
-    const { data, error } = await supabase
-      .rpc('calculate_route_profitability', { route_id: routeId });
-    
-    if (error) throw error;
-    return data;
-  },
-};
 
 // ============================================
 // GPS TRACKING - Real-time Operations
@@ -413,6 +402,141 @@ export const complianceService = {
 // ============================================
 // ANALYTICS - Dashboard Metrics
 // ============================================
+
+// ============================================
+// ROUTES - CRUD Operations
+// ============================================
+
+export const routeService = {
+  // Obtener todas las rutas
+  async getAll() {
+    const { data, error } = await supabase
+      .from('routes')
+      .select('*')
+      .order('timestamp', { ascending: false });
+    
+    if (error) throw error;
+    
+    // Transformar de snake_case (DB) a camelCase (App)
+    return data?.map(route => ({
+      id: route.id,
+      origin: route.origin,
+      destination: route.destination,
+      distance: route.distance,
+      estimatedPrice: route.estimated_price,
+      vehicleType: route.vehicle_type,
+      driver: route.driver,
+      vehicle: route.vehicle,
+      timestamp: route.timestamp,
+      status: route.status,
+      deliveryProof: route.delivery_proof
+    })) || [];
+  },
+
+  // Obtener rutas por conductor
+  async getByDriver(driverName: string) {
+    const { data, error } = await supabase
+      .from('routes')
+      .select('*')
+      .eq('driver', driverName)
+      .order('timestamp', { ascending: false });
+    
+    if (error) throw error;
+    
+    return data?.map(route => ({
+      id: route.id,
+      origin: route.origin,
+      destination: route.destination,
+      distance: route.distance,
+      estimatedPrice: route.estimated_price,
+      vehicleType: route.vehicle_type,
+      driver: route.driver,
+      vehicle: route.vehicle,
+      timestamp: route.timestamp,
+      status: route.status,
+      deliveryProof: route.delivery_proof
+    })) || [];
+  },
+
+  // Crear nueva ruta
+  async create(route: {
+    id: string;
+    origin: string;
+    destination: string;
+    distance: string;
+    estimatedPrice: string;
+    vehicleType: string;
+    driver?: string;
+    vehicle?: string;
+    timestamp: number;
+    status: 'Pending' | 'In Progress' | 'Completed';
+    deliveryProof?: any;
+  }) {
+    // Transformar de camelCase (App) a snake_case (DB)
+    const dbRoute = {
+      id: route.id,
+      origin: route.origin,
+      destination: route.destination,
+      distance: route.distance,
+      estimated_price: route.estimatedPrice,
+      vehicle_type: route.vehicleType,
+      driver: route.driver,
+      vehicle: route.vehicle,
+      timestamp: route.timestamp,
+      status: route.status,
+      delivery_proof: route.deliveryProof
+    };
+
+    const { data, error } = await supabase
+      .from('routes')
+      .insert([dbRoute])
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // Actualizar estado de ruta
+  async updateStatus(id: string, status: 'Pending' | 'In Progress' | 'Completed') {
+    const { data, error } = await supabase
+      .from('routes')
+      .update({ status })
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // Actualizar comprobante de entrega
+  async updateProof(id: string, deliveryProof: any) {
+    const { data, error } = await supabase
+      .from('routes')
+      .update({ 
+        delivery_proof: deliveryProof,
+        status: 'Completed'
+      })
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // Eliminar ruta
+  async delete(id: string) {
+    const { error } = await supabase
+      .from('routes')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw error;
+    return true;
+  }
+};
 
 export const analyticsService = {
   // Obtener métricas del dashboard

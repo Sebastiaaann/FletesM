@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, memo } from 'react';
+import React, { useState, useMemo, useCallback, memo, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
 import { divIcon, LatLng } from 'leaflet';
 import { Vehicle, MapFilter, VehicleLocation } from '../types';
@@ -321,16 +321,50 @@ const FleetMap: React.FC<FleetMapProps> = memo(({ vehicles }) => {
         showIdle: true
     });
     const [zoom, setZoom] = useState(10);
+    const [realtimeVehicles, setRealtimeVehicles] = useState<Vehicle[]>(vehicles);
+
+    // Update local vehicles when prop changes
+    useEffect(() => {
+        setRealtimeVehicles(vehicles);
+    }, [vehicles]);
+
+    // Listen for real-time GPS updates from drivers
+    useEffect(() => {
+        const handleLocationUpdate = (event: Event) => {
+            const customEvent = event as CustomEvent<{
+                vehicleId: string;
+                location: { lat: number; lng: number };
+                timestamp: number;
+            }>;
+            
+            const { vehicleId, location } = customEvent.detail;
+
+            // Update the vehicle's location in real-time
+            setRealtimeVehicles(prevVehicles =>
+                prevVehicles.map(vehicle =>
+                    vehicle.id === vehicleId
+                        ? { ...vehicle, location }
+                        : vehicle
+                )
+            );
+        };
+
+        window.addEventListener('vehicle-location-update', handleLocationUpdate);
+
+        return () => {
+            window.removeEventListener('vehicle-location-update', handleLocationUpdate);
+        };
+    }, []);
 
     // Memoize filtered vehicles to avoid recalculation on every render
     const filteredVehicles = useMemo(() => {
-        return vehicles.filter(vehicle => {
+        return realtimeVehicles.filter(vehicle => {
             if (vehicle.status === 'Active' && !filters.showActive) return false;
             if (vehicle.status === 'Maintenance' && !filters.showMaintenance) return false;
             if (vehicle.status === 'Idle' && !filters.showIdle) return false;
             return vehicle.location !== undefined;
         });
-    }, [vehicles, filters]);
+    }, [realtimeVehicles, filters]);
 
     // Memoize clusters
     const clusters = useMemo(() => {
@@ -417,7 +451,7 @@ const FleetMap: React.FC<FleetMapProps> = memo(({ vehicles }) => {
                                 icon={createMarkerIcon(vehicle.status)}
                             >
                                 <Popup className="custom-popup">
-                                    <div className="p-2 min-w-[200px]">
+                                    <div className="p-2 min-w-[240px]">
                                         <div className="flex items-center gap-2 mb-2">
                                             <MapPin className="w-4 h-4 text-brand-500" />
                                             <h3 className="font-bold text-sm text-dark-900">{vehicle.id}</h3>
@@ -431,6 +465,21 @@ const FleetMap: React.FC<FleetMapProps> = memo(({ vehicles }) => {
                                                 }`}>{vehicle.status}</span></p>
                                             <p><strong>Combustible:</strong> {vehicle.fuelLevel}%</p>
                                             <p><strong>Kilometraje:</strong> {vehicle.mileage.toLocaleString()} km</p>
+                                            
+                                            {/* GPS Information */}
+                                            <div className="mt-2 pt-2 border-t border-slate-200">
+                                                <div className="flex items-center gap-1 mb-1">
+                                                    <Navigation className="w-3 h-3 text-brand-500" />
+                                                    <strong className="text-brand-600">GPS en Tiempo Real</strong>
+                                                </div>
+                                                <p className="font-mono text-[10px] text-slate-600">
+                                                    <strong>Lat:</strong> {vehicle.location?.lat.toFixed(6)}<br />
+                                                    <strong>Lng:</strong> {vehicle.location?.lng.toFixed(6)}
+                                                </p>
+                                                <p className="text-[10px] text-slate-500 mt-1">
+                                                    <strong>Actualizado:</strong> {new Date().toLocaleTimeString('es-CL')}
+                                                </p>
+                                            </div>
                                         </div>
                                     </div>
                                 </Popup>

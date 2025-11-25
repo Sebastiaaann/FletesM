@@ -2,12 +2,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AppView } from '../types';
 import { useStore } from '../store/useStore';
-import { LayoutDashboard, Truck, Map, PieChart, Zap, FileCheck, Radar, Smartphone } from 'lucide-react';
+import { LayoutDashboard, Truck, Map, PieChart, Zap, FileCheck, Radar, Smartphone, Sun, Moon } from 'lucide-react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
+import { useTheme } from '../hooks/useTheme';
 
 const Navbar: React.FC = () => {
   const { currentView, setView } = useStore();
+  const { theme, toggleTheme } = useTheme();
   const navRef = useRef<HTMLDivElement>(null);
   const linksRef = useRef<(HTMLButtonElement | null)[]>([]);
   const contactRef = useRef<HTMLDivElement>(null);
@@ -179,6 +181,19 @@ const Navbar: React.FC = () => {
               </div>
             </div>
 
+            {/* Theme Toggle - Desktop */}
+            <button
+              onClick={toggleTheme}
+              className="hidden md:flex items-center gap-2 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all duration-300 border border-transparent hover:border-white/10"
+              aria-label={`Cambiar a modo ${theme === 'dark' ? 'claro' : 'oscuro'}`}
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-5 h-5" />
+              ) : (
+                <Moon className="w-5 h-5" />
+              )}
+            </button>
+
             {/* Status Indicator - Desktop */}
             <div className="hidden md:flex items-center gap-3 px-3 py-1.5 rounded-full bg-white/5 border border-white/5">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
@@ -218,6 +233,27 @@ const Navbar: React.FC = () => {
 
         {/* Contact Info */}
         <div ref={contactRef} className="flex flex-col gap-6 text-sm">
+          {/* Theme Toggle - Mobile */}
+          <div className="font-light">
+            <p className="tracking-wider text-white/40 uppercase text-xs mb-2">Apariencia</p>
+            <button
+              onClick={toggleTheme}
+              className="flex items-center gap-3 px-4 py-2 rounded-lg bg-white/5 border border-white/5 hover:bg-white/10 transition-all duration-300 w-fit"
+            >
+              {theme === 'dark' ? (
+                <>
+                  <Sun className="w-4 h-4 text-yellow-400" />
+                  <span className="text-sm text-slate-300">Modo Claro</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="w-4 h-4 text-blue-400" />
+                  <span className="text-sm text-slate-300">Modo Oscuro</span>
+                </>
+              )}
+            </button>
+          </div>
+
           <div className="font-light">
             <p className="tracking-wider text-white/40 uppercase text-xs mb-2">Sistema</p>
             <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-white/5 border border-white/5 w-fit">

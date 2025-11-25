@@ -10,6 +10,7 @@ import PageLoader from './components/PageLoader';
 
 import SkipLink from './components/SkipLink';
 import Hero from './components/Hero';
+import SupabaseTest from './components/SupabaseTest';
 
 // Lazy load heavy components
 const Dashboard = React.lazy(() => import('./components/Dashboard'));
@@ -22,10 +23,27 @@ const FleetTracking = React.lazy(() => import('./components/FleetTracking'));
 const DriverMobile = React.lazy(() => import('./components/DriverMobile'));
 
 import { AppView } from './types';
+import { enableDemoMode } from './utils/demoData';
+import { showToast } from './components/Toast';
 
 const App: React.FC = () => {
-  const { currentView, setView } = useStore();
+  const store = useStore();
+  const { currentView, setView } = store;
   useSupabaseRealtime();
+
+  // Demo Mode: Press Ctrl+Shift+D
+  React.useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+        e.preventDefault();
+        enableDemoMode(useStore);
+        showToast.success('🎭 Modo Demo Activado', 'Datos de ejemplo cargados');
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, []);
 
   const renderView = () => {
     switch (currentView) {
@@ -75,6 +93,9 @@ const App: React.FC = () => {
           </div>
         </div>
       </footer>
+
+      {/* Test de conexión Supabase (temporal) */}
+      <SupabaseTest />
     </div>
   );
 };

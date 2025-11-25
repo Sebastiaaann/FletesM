@@ -2,29 +2,15 @@ import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { useStore } from '../store/useStore';
 import { analyzeFleetHealth } from '../services/geminiService';
 import { Vehicle, AppView } from '../types';
-import { BarChart3, Fuel, Wrench, TrendingUp, AlertCircle, Zap, MapPin, BellRing, Calendar, ArrowUpRight, ArrowDownRight, X, Package, Clock, CheckCircle2, Loader2 } from 'lucide-react';
+import { BarChart3, Fuel, Wrench, TrendingUp, AlertCircle, Zap, MapPin, BellRing, Calendar, ArrowUpRight, ArrowDownRight, X, Package, Clock, CheckCircle2, Loader2, FileSignature } from 'lucide-react';
 import MapSkeleton from './MapSkeleton';
 import Sparkline from './Sparkline';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { vehicleService } from '../services/databaseService';
+import DeliveryProofViewer from './DeliveryProofViewer';
 
 // Lazy load FleetMap for better performance
 const FleetMap = lazy(() => import('./FleetMap'));
-
-// Mock Data
-const initialVehicles: Vehicle[] = [
-   { id: "V-001", plate: "HG-LF-99", model: "Volvo FH16", status: "Active", mileage: 120500, fuelLevel: 75, nextService: "2024-11-15", location: { lat: -41.4693, lng: -72.9424 } },
-   { id: "V-002", plate: "JS-KK-22", model: "Scania R450", status: "Maintenance", mileage: 240100, fuelLevel: 10, nextService: "2024-10-28", location: { lat: -41.4850, lng: -72.9200 } },
-   { id: "V-003", plate: "LK-MM-11", model: "Mercedes Actros", status: "Active", mileage: 85000, fuelLevel: 92, nextService: "2024-12-01", location: { lat: -41.4500, lng: -72.9600 } },
-   { id: "V-004", plate: "PP-QA-55", model: "Ford F-Max", status: "Idle", mileage: 45000, fuelLevel: 40, nextService: "2025-01-10", location: { lat: -41.4800, lng: -72.9500 } },
-   { id: "V-005", plate: "AA-BB-11", model: "Iveco Stralis", status: "Active", mileage: 95000, fuelLevel: 88, nextService: "2024-12-10", location: { lat: -41.4700, lng: -72.9400 } },
-   { id: "V-006", plate: "CC-DD-22", model: "MAN TGX", status: "Active", mileage: 110000, fuelLevel: 65, nextService: "2024-11-25", location: { lat: -41.4680, lng: -72.9450 } },
-   { id: "V-007", plate: "EE-FF-33", model: "DAF XF", status: "Idle", mileage: 78000, fuelLevel: 45, nextService: "2025-01-05", location: { lat: -41.4720, lng: -72.9380 } },
-   { id: "V-008", plate: "GG-HH-44", model: "Renault T", status: "Active", mileage: 125000, fuelLevel: 70, nextService: "2024-11-20", location: { lat: -41.4650, lng: -72.9500 } },
-   { id: "V-009", plate: "II-JJ-55", model: "Volvo FH", status: "Maintenance", mileage: 180000, fuelLevel: 15, nextService: "2024-10-30", location: { lat: -41.4820, lng: -72.9250 } },
-   { id: "V-010", plate: "KK-LL-66", model: "Scania S", status: "Active", mileage: 92000, fuelLevel: 80, nextService: "2024-12-15", location: { lat: -41.4550, lng: -72.9550 } },
-   { id: "V-011", plate: "MM-NN-77", model: "Mercedes Arocs", status: "Idle", mileage: 67000, fuelLevel: 35, nextService: "2025-01-12", location: { lat: -41.4780, lng: -72.9480 } },
-   { id: "V-012", plate: "OO-PP-88", model: "Ford Cargo", status: "Active", mileage: 105000, fuelLevel: 72, nextService: "2024-11-28", location: { lat: -41.4520, lng: -72.9620 } },
-];
 
 const smartAlerts = [
    { id: 1, type: 'critical', msg: "Consumo excesivo de combustible detectado en V-001 (+15% sobre promedio)", time: "Hace 10m" },
@@ -53,28 +39,56 @@ const sparklineData = {
 const Dashboard: React.FC = () => {
    const [aiInsight, setAiInsight] = useState("Inicializando FleetTech AI...");
    const [dateRange, setDateRange] = useState('month');
+   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+   const [loadingVehicles, setLoadingVehicles] = useState(true);
+   const [selectedProof, setSelectedProof] = useState<any>(null);
    const registeredRoutes = useStore((state) => state.registeredRoutes);
 
+   // Cargar vehículos desde Supabase
+   useEffect(() => {
+      loadVehicles();
+      
+      // Escuchar cambios en tiempo real
+      const handleVehicleChange = () => loadVehicles();
+      window.addEventListener('vehicle-change', handleVehicleChange);
+      
+      return () => {
+         window.removeEventListener('vehicle-change', handleVehicleChange);
+      };
+   }, []);
+
+   const loadVehicles = async () => {
+      setLoadingVehicles(true);
+      try {
+         const data = await vehicleService.getAll();
+         setVehicles(data);
+      } catch (error) {
+         console.error('Error loading vehicles:', error);
+      } finally {
+         setLoadingVehicles(false);
+      }
+   };
+
    // FLOTA ACTIVA: Calcular vehículos activos vs total
-   const activeVehicles = initialVehicles.filter(v => v.status === 'Active').length;
-   const totalVehicles = initialVehicles.length;
-   const fleetChange = Math.round(((activeVehicles - 22) / 22) * 100); // Comparado con periodo anterior
+   const activeVehicles = vehicles.filter(v => v.status === 'Active').length;
+   const totalVehicles = vehicles.length;
+   const fleetChange = totalVehicles > 0 ? Math.round(((activeVehicles - totalVehicles * 0.9) / (totalVehicles * 0.9)) * 100) : 0;
 
    // EFICIENCIA: Calcular consumo promedio basado en nivel de combustible
-   const avgFuelEfficiency = initialVehicles.reduce((sum, v) => sum + v.fuelLevel, 0) / totalVehicles / 100 * 4.5;
+   const avgFuelEfficiency = totalVehicles > 0 ? vehicles.reduce((sum, v) => sum + (v.fuelLevel || 0), 0) / totalVehicles / 100 * 4.5 : 0;
    const fuelEfficiency = avgFuelEfficiency.toFixed(1);
    const fuelVsTarget = (avgFuelEfficiency - 3.3).toFixed(1);
 
    // MANTENIMIENTO: Contar vehículos en mantenimiento y próximos servicios
-   const maintenanceVehicles = initialVehicles.filter(v => v.status === 'Maintenance').length;
-   const upcomingService = initialVehicles.filter(v => {
+   const maintenanceVehicles = vehicles.filter(v => v.status === 'Maintenance').length;
+   const upcomingService = vehicles.filter(v => {
       const serviceDate = new Date(v.nextService);
       const today = new Date();
       const daysUntil = (serviceDate.getTime() - today.getTime()) / (1000 * 3600 * 24);
       return daysUntil <= 7 && daysUntil > 0;
    }).length;
    const totalPending = maintenanceVehicles + upcomingService;
-   const criticalCount = initialVehicles.filter(v => v.fuelLevel < 20 || v.status === 'Maintenance').length;
+   const criticalCount = vehicles.filter(v => (v.fuelLevel || 0) < 20 || v.status === 'Maintenance').length;
 
    // INGRESOS: Calcular desde rutas registradas
    const registeredRevenue = registeredRoutes.reduce((acc, route) => {
@@ -89,12 +103,14 @@ const Dashboard: React.FC = () => {
    const revenueGrowth = ((registeredRevenue / baseRevenue) * 100).toFixed(0);
 
    useEffect(() => {
-      const fetchInsight = async () => {
-         const insight = await analyzeFleetHealth(initialVehicles);
-         setAiInsight(insight);
-      };
-      fetchInsight();
-   }, []);
+      if (vehicles.length > 0 && !loadingVehicles) {
+         const fetchInsight = async () => {
+            const insight = await analyzeFleetHealth(vehicles);
+            setAiInsight(insight);
+         };
+         fetchInsight();
+      }
+   }, [vehicles, loadingVehicles]);
 
    return (
       <div className="min-h-screen pt-24 px-4 sm:px-6 lg:px-8 pb-10 bg-dark-950 text-slate-200">
@@ -129,7 +145,7 @@ const Dashboard: React.FC = () => {
             {/* Bento Grid */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                {/* Key Metrics */}
-               <div className="glass-card p-6 rounded-2xl md:col-span-1 animate-slide-up relative overflow-hidden group" style={{ animationDelay: '0.1s' }}>
+               <div className="glass-card p-6 rounded-2xl md:col-span-1 animate-slide-up relative overflow-hidden group hover-lift" style={{ animationDelay: '0.1s' }}>
                   <div className="flex items-center justify-between mb-4 relative z-10">
                      <span className="text-slate-400 text-xs uppercase tracking-wider font-bold">Flota Activa</span>
                      <div className="p-2 bg-brand-500/10 rounded-lg">
@@ -146,24 +162,24 @@ const Dashboard: React.FC = () => {
                   </div>
                </div>
 
-               <div className="glass-card p-6 rounded-2xl md:col-span-1 animate-slide-up relative overflow-hidden group" style={{ animationDelay: '0.2s' }}>
+               <div className="glass-card p-6 rounded-2xl md:col-span-1 animate-slide-up relative overflow-hidden group hover-lift" style={{ animationDelay: '0.2s' }}>
                   <div className="flex items-center justify-between mb-4 relative z-10">
-                     <span className="text-slate-400 text-xs uppercase tracking-wider font-bold">Eficiencia</span>
-                     <div className="p-2 bg-accent-500/10 rounded-lg">
-                        <Fuel className="text-accent-500 w-5 h-5" />
+                     <span className="text-slate-400 text-xs uppercase tracking-wider font-bold">Vehículos Activos</span>
+                     <div className="p-2 bg-green-500/10 rounded-lg">
+                        <CheckCircle2 className="text-green-500 w-5 h-5" />
                      </div>
                   </div>
-                  <div className="text-3xl font-bold text-white mb-1 relative z-10">{fuelEfficiency}<span className="text-lg text-slate-500 font-normal">km/L</span></div>
-                  <div className={`flex items-center gap-1 text-xs ${parseFloat(fuelVsTarget) >= 0 ? 'text-green-400' : 'text-red-400'} mb-4 relative z-10`}>
-                     {parseFloat(fuelVsTarget) >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                     {fuelVsTarget} vs objetivo
+                  <div className="text-3xl font-bold text-white mb-1 relative z-10">{activeVehicles}<span className="text-lg text-slate-500 font-normal">/{totalVehicles}</span></div>
+                  <div className={`flex items-center gap-1 text-xs ${fleetChange >= 0 ? 'text-green-400' : 'text-red-400'} mb-4 relative z-10`}>
+                     {fleetChange >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                     {Math.abs(fleetChange)}% operacionales
                   </div>
                   <div className="absolute bottom-0 left-0 right-0 h-16 opacity-30 group-hover:opacity-50 transition-opacity">
-                     <Sparkline data={sparklineData.fuel} color="#ec4899" />
+                     <Sparkline data={sparklineData.fleet} color="#22c55e" />
                   </div>
                </div>
 
-               <div className="glass-card p-6 rounded-2xl md:col-span-1 animate-slide-up relative overflow-hidden group" style={{ animationDelay: '0.3s' }}>
+               <div className="glass-card p-6 rounded-2xl md:col-span-1 animate-slide-up relative overflow-hidden group hover-lift" style={{ animationDelay: '0.3s' }}>
                   <div className="flex items-center justify-between mb-4 relative z-10">
                      <span className="text-slate-400 text-xs uppercase tracking-wider font-bold">Mantenimiento</span>
                      <div className="p-2 bg-orange-500/10 rounded-lg">
@@ -179,7 +195,7 @@ const Dashboard: React.FC = () => {
                   </div>
                </div>
 
-               <div className="glass-card p-6 rounded-2xl md:col-span-1 animate-slide-up relative overflow-hidden group" style={{ animationDelay: '0.4s' }}>
+               <div className="glass-card p-6 rounded-2xl md:col-span-1 animate-slide-up relative overflow-hidden group hover-lift" style={{ animationDelay: '0.4s' }}>
                   <div className="flex items-center justify-between mb-4 relative z-10">
                      <span className="text-slate-400 text-xs uppercase tracking-wider font-bold">Ingresos</span>
                      <div className="p-2 bg-green-500/10 rounded-lg">
@@ -244,7 +260,7 @@ const Dashboard: React.FC = () => {
                   </div>
                ) : (
                   <div className="overflow-x-auto -mx-6 px-6">
-                     <table className="w-full min-w-[800px]">
+                     <table className="w-full min-w-[900px]">
                         <thead>
                            <tr className="border-b border-white/5">
                               <th className="text-left py-3 px-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Estado</th>
@@ -254,6 +270,7 @@ const Dashboard: React.FC = () => {
                               <th className="text-left py-3 px-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Vehículo</th>
                               <th className="text-left py-3 px-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Precio</th>
                               <th className="text-left py-3 px-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Fecha</th>
+                              <th className="text-center py-3 px-4 text-xs font-bold text-slate-400 uppercase tracking-wider">POD</th>
                            </tr>
                         </thead>
                         <tbody>
@@ -301,6 +318,21 @@ const Dashboard: React.FC = () => {
                                           year: 'numeric'
                                        })}
                                     </span>
+                                 </td>
+                                 <td className="py-4 px-4 text-center">
+                                    {route.deliveryProof ? (
+                                       <button
+                                          onClick={() => setSelectedProof(route.deliveryProof)}
+                                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-500/10 border border-brand-500/20 text-brand-400 rounded-lg text-xs font-medium hover:bg-brand-500/20 transition-colors"
+                                       >
+                                          <FileSignature className="w-3.5 h-3.5" />
+                                          Ver
+                                       </button>
+                                    ) : route.status === 'Completed' ? (
+                                       <span className="text-slate-500 text-xs">Sin firma</span>
+                                    ) : (
+                                       <span className="text-slate-600 text-xs">-</span>
+                                    )}
                                  </td>
                               </tr>
                            ))}
@@ -354,12 +386,24 @@ const Dashboard: React.FC = () => {
                {/* Interactive Map with Leaflet - Lazy Loaded */}
                <div className="lg:col-span-2 glass-panel rounded-2xl border border-white/5 p-1 relative min-h-[400px] overflow-hidden animate-fade-in">
                   <Suspense fallback={<MapSkeleton />}>
-                     <FleetMap vehicles={initialVehicles} />
+                     {loadingVehicles ? (
+                        <MapSkeleton />
+                     ) : (
+                        <FleetMap vehicles={vehicles} />
+                     )}
                   </Suspense>
                </div>
             </div>
 
          </div>
+
+         {/* Delivery Proof Viewer Modal */}
+         {selectedProof && (
+            <DeliveryProofViewer 
+               deliveryProof={selectedProof}
+               onClose={() => setSelectedProof(null)}
+            />
+         )}
       </div>
    );
 };

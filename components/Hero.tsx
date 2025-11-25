@@ -43,10 +43,10 @@ const Hero: React.FC = () => {
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-slide-up" style={{ animationDelay: '0.4s' }}>
           <button
             onClick={() => setView(AppView.DASHBOARD)}
-            className="group relative px-8 py-4 bg-white text-black rounded-lg font-bold text-lg transition-all hover:scale-105 hover:shadow-[0_0_40px_rgba(255,255,255,0.3)] flex items-center gap-2 overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+            className="group relative px-8 py-4 bg-white text-black rounded-lg font-bold text-lg transition-all hover:scale-105 hover:shadow-[0_0_40px_rgba(255,255,255,0.3)] flex items-center gap-2 overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black hover-glow"
             aria-label="Abrir Dashboard"
           >
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]"></div>
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent -translate-x-full group-hover:shimmer"></div>
             <span className="relative flex items-center gap-2">Abrir Dashboard <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" aria-hidden="true" /></span>
           </button>
           <button
@@ -86,8 +86,8 @@ const Hero: React.FC = () => {
             { icon: <Activity className="text-accent-400" />, title: "Mantenimiento Predictivo", desc: "La IA pronostica reparaciones antes de que ocurran fallas." },
             { icon: <Shield className="text-orange-400" />, title: "Cumplimiento y Seguridad", desc: "Validación automatizada de licencias y puntuación de seguridad." }
           ].map((feature, idx) => (
-            <div key={idx} className="p-8 rounded-2xl glass-card text-left group">
-              <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform border border-white/10">
+            <div key={idx} className="p-8 rounded-2xl glass-card text-left group hover-lift cursor-pointer">
+              <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 group-hover:rotate-6 transition-all border border-white/10">
                 {feature.icon}
               </div>
               <h3 className="text-white font-semibold text-xl mb-2">{feature.title}</h3>

@@ -1,29 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
-import { MapPin, Navigation, CheckCircle2, Clock, Truck, AlertCircle, PhoneCall, Package, ArrowRight, Play, Square, Plus, X } from 'lucide-react';
+import { MapPin, Navigation, CheckCircle2, Clock, Truck, AlertCircle, PhoneCall, Package, ArrowRight, Play, Square, Plus, X, Loader2, FileSignature } from 'lucide-react';
 import AddressAutocomplete from './AddressAutocomplete';
 import { generateSmartQuote } from '../services/geminiService';
 import LoadingButton from './LoadingButton';
+import { driverService, vehicleService } from '../services/databaseService';
+import type { Driver, Vehicle } from '../types';
+import SignaturePad from './SignaturePad';
+import { showToast } from './Toast';
 
 interface DriverMobileProps {
   driverName?: string;
 }
 
-// Mock data - en producción vendría de la base de datos
-const MOCK_DRIVERS = [
-  { id: "D-1", name: "Carlos Mendoza" },
-  { id: "D-2", name: "Ana Silva" },
-  { id: "D-3", name: "Jorge O'Ryan" },
-];
-
-const MOCK_VEHICLES = [
-  { id: "V-001", plate: "HG-LF-99", model: "Volvo FH16" },
-  { id: "V-002", plate: "JS-KK-22", model: "Scania R450" },
-  { id: "V-003", plate: "LK-MM-11", model: "Mercedes Actros" },
-];
-
 const DriverMobile: React.FC<DriverMobileProps> = ({ driverName = "Conductor" }) => {
-  const { registeredRoutes, updateRouteStatus, addRoute } = useStore();
+  const { registeredRoutes, updateRouteStatus, updateRouteWithProof, addRoute } = useStore();
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
   const [selectedDriver, setSelectedDriver] = useState(driverName);
   const [selectedVehicle, setSelectedVehicle] = useState('');
   const [activeRoute, setActiveRoute] = useState<any | null>(null);
@@ -40,6 +34,133 @@ const DriverMobile: React.FC<DriverMobileProps> = ({ driverName = "Conductor" })
   const [description, setDescription] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [quoteResult, setQuoteResult] = useState<any | null>(null);
+
+  // Signature state
+  const [showSignature, setShowSignature] = useState(false);
+  const [clientName, setClientName] = useState('');
+  const [clientId, setClientId] = useState('');
+  const [deliveryNotes, setDeliveryNotes] = useState('');
+
+  // GPS Tracking state
+  const [gpsEnabled, setGpsEnabled] = useState(false);
+  const [currentLocation, setCurrentLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [watchId, setWatchId] = useState<number | null>(null);
+
+  // Cargar conductores y vehículos desde Supabase
+  useEffect(() => {
+    loadData();
+    
+    // Escuchar cambios en tiempo real
+    const handleVehicleChange = () => loadData();
+    const handleDriverChange = () => loadData();
+    
+    window.addEventListener('vehicle-change', handleVehicleChange);
+    window.addEventListener('driver-change', handleDriverChange);
+    
+    return () => {
+      window.removeEventListener('vehicle-change', handleVehicleChange);
+      window.removeEventListener('driver-change', handleDriverChange);
+    };
+  }, []);
+
+  const loadData = async () => {
+    setLoadingData(true);
+    try {
+      const [driversData, vehiclesData] = await Promise.all([
+        driverService.getAll(),
+        vehicleService.getAll()
+      ]);
+      setDrivers(driversData.filter(d => d.status === 'Available' || d.status === 'On Route'));
+      setVehicles(vehiclesData.filter(v => v.status === 'Active'));
+    } catch (error) {
+      console.error('Error loading data:', error);
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
+  // GPS Functions
+  const startGPSTracking = () => {
+    if (!selectedVehicle) {
+      showToast.warning('Selecciona un vehículo', 'Debes tener un vehículo asignado para activar el GPS');
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      showToast.error('GPS no disponible', 'Tu navegador no soporta geolocalización');
+      setLocationError('Geolocalización no disponible');
+      return;
+    }
+
+    const id = navigator.geolocation.watchPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        const newLocation = { lat: latitude, lng: longitude };
+        setCurrentLocation(newLocation);
+        setLocationError(null);
+
+        // Actualizar ubicación del vehículo en Supabase
+        try {
+          await vehicleService.update(selectedVehicle, {
+            location: newLocation,
+          });
+          
+          // Disparar evento para actualizar mapa en tiempo real
+          window.dispatchEvent(new CustomEvent('vehicle-location-update', {
+            detail: {
+              vehicleId: selectedVehicle,
+              location: newLocation,
+              timestamp: Date.now(),
+            }
+          }));
+        } catch (error) {
+          console.error('Error updating vehicle location:', error);
+        }
+      },
+      (error) => {
+        console.error('GPS Error:', error);
+        setLocationError(error.message);
+        showToast.error('Error GPS', error.message);
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 5000,
+        timeout: 10000,
+      }
+    );
+
+    setWatchId(id);
+    setGpsEnabled(true);
+    showToast.success('GPS Activado', 'Tu ubicación se está compartiendo');
+  };
+
+  const stopGPSTracking = () => {
+    if (watchId !== null) {
+      navigator.geolocation.clearWatch(watchId);
+      setWatchId(null);
+    }
+    setGpsEnabled(false);
+    setCurrentLocation(null);
+    showToast.info('GPS Desactivado', 'Dejaste de compartir tu ubicación');
+  };
+
+  const toggleGPS = () => {
+    if (gpsEnabled) {
+      stopGPSTracking();
+    } else {
+      startGPSTracking();
+    }
+  };
+
+  // Cleanup GPS on unmount
+  useEffect(() => {
+    return () => {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+    };
+  }, [watchId]);
 
   // Filtrar rutas asignadas al conductor
   // Si selectedDriver es "Conductor" (valor por defecto), mostrar TODAS las rutas
@@ -79,15 +200,50 @@ const DriverMobile: React.FC<DriverMobileProps> = ({ driverName = "Conductor" })
     setIsTracking(true);
     setElapsedTime(0);
     updateRouteStatus(route.id, 'In Progress');
+    showToast.success('Ruta iniciada', `${route.origin.split(',')[0]} → ${route.destination.split(',')[0]}`);
   };
 
   const handleFinishRoute = () => {
-    if (activeRoute) {
-      updateRouteStatus(activeRoute.id, 'Completed');
-      setIsTracking(false);
-      setActiveRoute(null);
-      setElapsedTime(0);
-    }
+    // Show signature modal instead of immediately completing
+    setShowSignature(true);
+  };
+
+  const handleSignatureSave = async (signatureData: string) => {
+    if (!activeRoute) return;
+
+    // Create delivery proof object
+    const deliveryProof = {
+      signature: signatureData,
+      clientName: clientName || undefined,
+      clientId: clientId || undefined,
+      deliveredAt: Date.now(),
+      notes: deliveryNotes || undefined,
+    };
+
+    // Update route with delivery proof and mark as completed
+    await updateRouteWithProof(activeRoute.id, deliveryProof);
+    
+    // Success notification
+    showToast.success(
+      '¡Ruta completada!', 
+      `Entrega confirmada${clientName ? ' a ' + clientName : ''}`
+    );
+    
+    // Reset states
+    setIsTracking(false);
+    setActiveRoute(null);
+    setElapsedTime(0);
+    setShowSignature(false);
+    setClientName('');
+    setClientId('');
+    setDeliveryNotes('');
+  };
+
+  const handleSignatureCancel = () => {
+    setShowSignature(false);
+    setClientName('');
+    setClientId('');
+    setDeliveryNotes('');
   };
 
   const calculateDistance = (coord1?: [number, number], coord2?: [number, number]): number => {
@@ -106,7 +262,7 @@ const DriverMobile: React.FC<DriverMobileProps> = ({ driverName = "Conductor" })
 
   const handleGenerateQuote = async () => {
     if (!origin || !destination) {
-      alert('Por favor ingresa origen y destino');
+      showToast.warning('Faltan datos', 'Por favor ingresa origen y destino');
       return;
     }
 
@@ -114,10 +270,26 @@ const DriverMobile: React.FC<DriverMobileProps> = ({ driverName = "Conductor" })
     try {
       const distance = calculateDistance(originCoords, destCoords);
       const result = await generateSmartQuote(description || 'Transporte de carga', `${distance} km`);
+      
+      // Validar que el resultado tenga los campos necesarios
+      if (!result || !result.estimatedPrice || !result.vehicleType || !result.timeEstimate) {
+        throw new Error('Respuesta inválida de la IA');
+      }
+      
       setQuoteResult(result);
+      showToast.success('Cotización generada', 'Revisa los detalles abajo');
     } catch (error) {
       console.error('Error generating quote:', error);
-      alert('Error al generar cotización');
+      showToast.error('Error al generar cotización', 'Intenta de nuevo en un momento');
+      
+      // Fallback: generar cotización básica
+      const distance = calculateDistance(originCoords, destCoords);
+      const basePrice = distance * 1500;
+      setQuoteResult({
+        estimatedPrice: `$${basePrice.toLocaleString('es-CL')} - $${(basePrice * 1.3).toLocaleString('es-CL')}`,
+        vehicleType: distance > 100 ? 'Camión grande' : 'Camión 3/4',
+        timeEstimate: `${Math.ceil(distance / 60)} - ${Math.ceil(distance / 50)} horas`,
+      });
     } finally {
       setIsGenerating(false);
     }
@@ -155,6 +327,9 @@ const DriverMobile: React.FC<DriverMobileProps> = ({ driverName = "Conductor" })
 
     addRoute(newRoute);
     
+    // Success notification
+    showToast.success('Ruta creada', `${origin.split(',')[0]} → ${destination.split(',')[0]}`);
+    
     // Reset form
     setOrigin('');
     setDestination('');
@@ -167,19 +342,64 @@ const DriverMobile: React.FC<DriverMobileProps> = ({ driverName = "Conductor" })
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-dark-950 to-dark-900 text-white pb-20 pt-20">
+    <div className="min-h-screen bg-gradient-to-b from-dark-950 to-dark-900 text-white pb-20 pt-20 mobile-ui touch-scroll safe-area-top safe-area-bottom">
       
       {/* Header */}
-      <div className="bg-gradient-to-r from-brand-600 to-brand-500 p-6 pb-8 rounded-b-3xl shadow-2xl mt-4">
+      <div className="bg-gradient-to-r from-brand-600 to-brand-500 p-6 pb-8 rounded-b-3xl shadow-2xl mt-4 safe-area-top">
         <div className="flex items-center justify-between mb-4">
-          <div>
+          <div className="flex-1">
             <p className="text-brand-100 text-sm font-medium">Bienvenido</p>
             <h1 className="text-2xl font-bold text-white">{selectedDriver}</h1>
+            {selectedVehicle && (
+              <p className="text-brand-100 text-xs mt-1">Vehículo: {selectedVehicle}</p>
+            )}
           </div>
-          <div className="p-3 bg-white/20 rounded-full backdrop-blur-sm">
-            <Truck className="w-6 h-6 text-white" />
+          <div className="flex gap-2">
+            {/* GPS Toggle Button */}
+            <button
+              onClick={toggleGPS}
+              className={`p-3 rounded-full backdrop-blur-sm transition-all touch-feedback ${
+                gpsEnabled 
+                  ? 'bg-green-500/30 ring-2 ring-green-400 mobile-pulse' 
+                  : 'bg-white/20 hover:bg-white/30 active:scale-95'
+              }`}
+              title={gpsEnabled ? 'GPS Activo' : 'Activar GPS'}
+              aria-label={gpsEnabled ? 'GPS Activo - Toca para desactivar' : 'Activar GPS'}
+            >
+              <Navigation className={`w-6 h-6 ${gpsEnabled ? 'text-green-300' : 'text-white'}`} />
+            </button>
+            <div className="p-3 bg-white/20 rounded-full backdrop-blur-sm">
+              <Truck className="w-6 h-6 text-white" />
+            </div>
           </div>
         </div>
+        
+        {/* GPS Status Indicator */}
+        {gpsEnabled && currentLocation && (
+          <div className="mt-4 bg-green-500/20 border border-green-400/30 rounded-xl p-3 animate-fade-in">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
+                <span className="flex h-2 w-2 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+                <span className="text-xs font-semibold text-green-300">GPS Activo</span>
+              </div>
+              <span className="text-xs text-green-200/80 ml-auto">
+                {currentLocation.lat.toFixed(4)}, {currentLocation.lng.toFixed(4)}
+              </span>
+            </div>
+          </div>
+        )}
+        
+        {locationError && (
+          <div className="mt-4 bg-red-500/20 border border-red-400/30 rounded-xl p-3 animate-fade-in">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-400" />
+              <span className="text-xs text-red-300">{locationError}</span>
+            </div>
+          </div>
+        )}
         
         {/* Status Summary */}
         <div className="grid grid-cols-3 gap-3 mt-6">
@@ -212,7 +432,8 @@ const DriverMobile: React.FC<DriverMobileProps> = ({ driverName = "Conductor" })
       {!showNewRouteForm && !isTracking && (
         <button
           onClick={() => setShowNewRouteForm(true)}
-          className="fixed bottom-24 right-6 z-30 bg-brand-500 hover:bg-brand-600 text-white p-4 rounded-full shadow-2xl transition-all hover:scale-110"
+          className="fixed bottom-24 right-6 z-30 bg-brand-500 hover:bg-brand-600 active:scale-95 text-white p-4 rounded-full shadow-2xl transition-all hover:scale-110 touch-feedback safe-area-bottom"
+          aria-label="Crear nueva ruta"
         >
           <Plus className="w-6 h-6" />
         </button>
@@ -221,7 +442,7 @@ const DriverMobile: React.FC<DriverMobileProps> = ({ driverName = "Conductor" })
       {/* New Route Form Modal */}
       {showNewRouteForm && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 flex items-end">
-          <div className="w-full bg-dark-900 rounded-t-3xl p-6 max-h-[90vh] overflow-y-auto animate-slide-up">
+          <div className="w-full bg-dark-900 rounded-t-3xl p-6 max-h-[90vh] overflow-y-auto animate-slide-up touch-scroll hide-scrollbar mobile-form safe-area-bottom">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-bold text-white">Nueva Ruta</h2>
               <button
@@ -245,9 +466,10 @@ const DriverMobile: React.FC<DriverMobileProps> = ({ driverName = "Conductor" })
                   value={selectedDriver}
                   onChange={(e) => setSelectedDriver(e.target.value)}
                   className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-brand-500"
+                  disabled={loadingData}
                 >
-                  <option value="Conductor" className="bg-dark-900">Seleccionar conductor</option>
-                  {MOCK_DRIVERS.map(driver => (
+                  <option value="Conductor" className="bg-dark-900">{loadingData ? 'Cargando...' : 'Seleccionar conductor'}</option>
+                  {drivers.map(driver => (
                     <option key={driver.id} value={driver.name} className="bg-dark-900">
                       {driver.name}
                     </option>
@@ -264,9 +486,10 @@ const DriverMobile: React.FC<DriverMobileProps> = ({ driverName = "Conductor" })
                   value={selectedVehicle}
                   onChange={(e) => setSelectedVehicle(e.target.value)}
                   className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-brand-500"
+                  disabled={loadingData}
                 >
-                  <option value="" className="bg-dark-900">Seleccionar vehículo</option>
-                  {MOCK_VEHICLES.map(vehicle => (
+                  <option value="" className="bg-dark-900">{loadingData ? 'Cargando...' : 'Seleccionar vehículo'}</option>
+                  {vehicles.map(vehicle => (
                     <option key={vehicle.id} value={vehicle.plate} className="bg-dark-900">
                       {vehicle.plate} - {vehicle.model}
                     </option>
@@ -311,33 +534,54 @@ const DriverMobile: React.FC<DriverMobileProps> = ({ driverName = "Conductor" })
                 onClick={handleGenerateQuote}
                 loading={isGenerating}
                 disabled={!origin || !destination}
-                className="w-full"
+                className="w-full active:scale-98 touch-feedback"
               >
                 Generar Cotización con IA
               </LoadingButton>
 
               {quoteResult && (
-                <div className="bg-brand-500/10 border border-brand-500/30 rounded-xl p-4 space-y-3">
+                <div className="bg-brand-500/10 border border-brand-500/30 rounded-xl p-4 space-y-3 animate-fade-in">
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400 text-sm">Precio Estimado</span>
-                    <span className="text-2xl font-bold text-brand-400">{quoteResult.estimatedPrice}</span>
+                    <span className="text-2xl font-bold text-brand-400">
+                      {quoteResult.estimatedPrice || '$0 - $0'}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400 text-sm">Vehículo</span>
-                    <span className="text-white font-semibold">{quoteResult.vehicleType}</span>
+                    <span className="text-slate-400 text-sm">Vehículo Recomendado</span>
+                    <span className="text-white font-semibold">
+                      {quoteResult.vehicleType || 'No especificado'}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400 text-sm">Tiempo Estimado</span>
-                    <span className="text-white font-semibold">{quoteResult.timeEstimate}</span>
+                    <span className="text-white font-semibold">
+                      {quoteResult.timeEstimate || 'Calculando...'}
+                    </span>
                   </div>
+                  
+                  {/* Show selected vehicle if different from recommendation */}
+                  {selectedVehicle && (
+                    <div className="flex items-center justify-between pt-3 border-t border-white/10">
+                      <span className="text-slate-400 text-sm">Vehículo Asignado</span>
+                      <span className="text-brand-300 font-semibold">{selectedVehicle}</span>
+                    </div>
+                  )}
                   
                   <button
                     onClick={handleSaveRoute}
-                    className="w-full mt-4 bg-brand-500 hover:bg-brand-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors"
+                    disabled={!selectedDriver || selectedDriver === 'Conductor' || !selectedVehicle}
+                    className="w-full mt-4 bg-brand-500 hover:bg-brand-600 active:scale-98 disabled:bg-slate-600 disabled:cursor-not-allowed disabled:active:scale-100 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all touch-feedback"
                   >
                     <CheckCircle2 className="w-5 h-5" />
                     Crear Ruta
                   </button>
+                  
+                  {(!selectedDriver || selectedDriver === 'Conductor' || !selectedVehicle) && (
+                    <p className="text-xs text-yellow-400 text-center">
+                      ⚠️ Selecciona un conductor y vehículo para crear la ruta
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -390,10 +634,11 @@ const DriverMobile: React.FC<DriverMobileProps> = ({ driverName = "Conductor" })
             {/* Finish Button */}
             <button
               onClick={handleFinishRoute}
-              className="w-full bg-white text-green-600 py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 hover:bg-green-50 transition-colors shadow-lg"
+              className="w-full bg-white text-green-600 py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 hover:bg-green-50 active:scale-98 transition-all shadow-lg touch-feedback"
+              aria-label="Finalizar ruta y firmar comprobante"
             >
-              <CheckCircle2 className="w-6 h-6" />
-              Finalizar Ruta
+              <FileSignature className="w-6 h-6" />
+              Finalizar y Firmar
             </button>
           </div>
         </div>
@@ -496,12 +741,107 @@ const DriverMobile: React.FC<DriverMobileProps> = ({ driverName = "Conductor" })
       </div>
 
       {/* Emergency Contact */}
-      <div className="fixed bottom-0 left-0 right-0 bg-dark-950/95 backdrop-blur-lg border-t border-white/10 p-4">
-        <button className="w-full bg-red-500/10 border-2 border-red-500 text-red-400 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-500/20 transition-colors">
-          <PhoneCall className="w-5 h-5" />
-          Contactar Soporte
-        </button>
-      </div>
+      {!isTracking && (
+        <div className="fixed bottom-0 left-0 right-0 bg-dark-950/95 backdrop-blur-lg border-t border-white/10 p-4">
+          <button className="w-full bg-red-500/10 border-2 border-red-500 text-red-400 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-500/20 transition-colors">
+            <PhoneCall className="w-5 h-5" />
+            Contactar Soporte
+          </button>
+        </div>
+      )}
+
+      {/* Signature Modal */}
+      {showSignature && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 safe-area-top safe-area-bottom">
+          <div className="w-full max-w-lg bg-dark-900 rounded-2xl shadow-2xl overflow-hidden mobile-form">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-brand-600 to-brand-500 p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+                    <FileSignature className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-white">Comprobante de Entrega</h3>
+                    <p className="text-sm text-brand-100">Firma del cliente</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleSignatureCancel}
+                  className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-white" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-4">
+              {/* Route Info */}
+              {activeRoute && (
+                <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-2">
+                  <div className="flex items-center gap-2 text-sm text-slate-400">
+                    <MapPin className="w-4 h-4" />
+                    <span>{activeRoute.origin.split(',')[0]} → {activeRoute.destination.split(',')[0]}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-slate-400">
+                    <Clock className="w-4 h-4" />
+                    <span>Tiempo: {formatTime(elapsedTime)}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Client Information */}
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Nombre del Cliente
+                  </label>
+                  <input
+                    type="text"
+                    value={clientName}
+                    onChange={(e) => setClientName(e.target.value)}
+                    placeholder="Ej: Juan Pérez"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    RUT/Cédula (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    value={clientId}
+                    onChange={(e) => setClientId(e.target.value)}
+                    placeholder="Ej: 12.345.678-9"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Observaciones (Opcional)
+                  </label>
+                  <textarea
+                    value={deliveryNotes}
+                    onChange={(e) => setDeliveryNotes(e.target.value)}
+                    placeholder="Ej: Entregado en buen estado"
+                    rows={2}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent resize-none"
+                  />
+                </div>
+              </div>
+
+              {/* Signature Pad */}
+              <SignaturePad
+                onSave={handleSignatureSave}
+                onCancel={handleSignatureCancel}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

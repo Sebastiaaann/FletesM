@@ -21,6 +21,7 @@ export interface Vehicle {
   fuelLevel: number;
   nextService: string; // Date string
   location?: VehicleLocation; // Optional location for map display
+  city?: string; // Ciudad del vehículo
 }
 
 export interface MapFilter {

@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Driver, Vehicle, MaintenancePrediction } from '../types';
 import { predictMaintenance } from '../services/geminiService';
+import { vehicleService, driverService } from '../services/databaseService';
 import { Search, Plus, User, Truck, AlertTriangle, X, Save, Trash2, Edit2, Zap, Activity, Thermometer } from 'lucide-react';
-import showToast from './Toast';
+import { showToast } from './Toast';
 import LoadingButton from './LoadingButton';
 import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '../utils/errorMessages';
 import { validateChileanRut } from '../utils/validationRules';
@@ -21,19 +22,45 @@ const generateId = () => Math.random().toString(36).substr(2, 9);
 const FleetManager: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'vehicles' | 'drivers'>('vehicles');
   const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
   // --- STATE MANAGEMENT ---
-  const [drivers, setDrivers] = useState<Driver[]>([
-    { id: "D-1", name: "Carlos Mendoza", rut: "12345678-5", licenseType: "A5", licenseExpiry: "2025-03-15", status: "On Route" },
-    { id: "D-2", name: "Ana Silva", rut: "15432198-K", licenseType: "A4", licenseExpiry: "2024-11-20", status: "Available" },
-    { id: "D-3", name: "Jorge O'Ryan", rut: "9876543-2", licenseType: "A5", licenseExpiry: "2023-12-01", status: "Off Duty" },
-  ]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
 
-  const [vehicles, setVehicles] = useState<Vehicle[]>([
-    { id: "V-001", plate: "HG-LF-99", model: "Volvo FH16", status: "Active", mileage: 120500, fuelLevel: 75, nextService: "2024-11-15" },
-    { id: "V-002", plate: "JS-KK-22", model: "Scania R450", status: "Maintenance", mileage: 240100, fuelLevel: 10, nextService: "2024-10-28" },
-    { id: "V-003", plate: "LK-MM-11", model: "Mercedes Actros", status: "Active", mileage: 85000, fuelLevel: 92, nextService: "2024-12-01" },
-  ]);
+  // Cargar datos desde Supabase al montar el componente
+  useEffect(() => {
+    loadData();
+    
+    // Escuchar cambios en tiempo real
+    const handleVehicleChange = () => loadData();
+    const handleDriverChange = () => loadData();
+    
+    window.addEventListener('vehicle-change', handleVehicleChange);
+    window.addEventListener('driver-change', handleDriverChange);
+    
+    return () => {
+      window.removeEventListener('vehicle-change', handleVehicleChange);
+      window.removeEventListener('driver-change', handleDriverChange);
+    };
+  }, []);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const [vehiclesData, driversData] = await Promise.all([
+        vehicleService.getAll(),
+        driverService.getAll()
+      ]);
+      setVehicles(vehiclesData);
+      setDrivers(driversData);
+    } catch (error) {
+      console.error('Error loading data:', error);
+      showToast.error('Error al cargar datos');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // --- MODAL STATE ---
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -54,7 +81,7 @@ const FleetManager: React.FC = () => {
   const handleOpenCreate = () => {
     setModalMode('create');
     setFormData(activeTab === 'vehicles'
-      ? { plate: '', model: '', status: 'Idle', mileage: 0, fuelLevel: 100, nextService: '' }
+      ? { plate: '', model: '', status: 'Idle', mileage: 0, fuelLevel: 100, nextService: '', city: '' }
       : { name: '', rut: '', licenseType: 'A4', licenseExpiry: '', status: 'Available' }
     );
     setErrors({});
@@ -69,15 +96,22 @@ const FleetManager: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm(ERROR_MESSAGES.DELETE_CONFIRM)) {
+  const handleDelete = async (id: string) => {
+    if (!confirm(ERROR_MESSAGES.DELETE_CONFIRM)) return;
+
+    try {
       if (activeTab === 'vehicles') {
+        await vehicleService.delete(id);
         setVehicles(prev => prev.filter(v => v.id !== id));
         showToast.info(SUCCESS_MESSAGES.VEHICLE_DELETED);
       } else {
+        await driverService.delete(id);
         setDrivers(prev => prev.filter(d => d.id !== id));
         showToast.info(SUCCESS_MESSAGES.DRIVER_DELETED);
       }
+    } catch (error) {
+      console.error('Error deleting:', error);
+      showToast.error('Error al eliminar');
     }
   };
 
@@ -88,9 +122,7 @@ const FleetManager: React.FC = () => {
       if (!formData.model) newErrors.model = ERROR_MESSAGES.VEHICLE_MODEL_REQUIRED;
     } else {
       if (!formData.name) newErrors.name = ERROR_MESSAGES.DRIVER_NAME_REQUIRED;
-      console.log('Validating RUT:', formData.rut);
       const rutError = validateChileanRut(formData.rut);
-      console.log('RUT Error result:', rutError);
       if (rutError) newErrors.rut = rutError;
       if (!formData.licenseExpiry) newErrors.licenseExpiry = ERROR_MESSAGES.DRIVER_LICENSE_EXPIRY_REQUIRED;
     }
@@ -103,29 +135,33 @@ const FleetManager: React.FC = () => {
 
     setIsSaving(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate API delay
-
       if (modalMode === 'create') {
-        const newItem = { ...formData, id: generateId() };
+        const newItem = { ...formData, id: `${activeTab === 'vehicles' ? 'V' : 'D'}-${Date.now()}` };
+        
         if (activeTab === 'vehicles') {
-          setVehicles([...vehicles, newItem]);
+          await vehicleService.create(newItem);
+          await loadData(); // Recargar desde Supabase
           showToast.success(SUCCESS_MESSAGES.VEHICLE_CREATED);
         } else {
-          setDrivers([...drivers, newItem]);
+          await driverService.create(newItem);
+          await loadData(); // Recargar desde Supabase
           showToast.success(SUCCESS_MESSAGES.DRIVER_CREATED);
         }
       } else {
         if (activeTab === 'vehicles') {
-          setVehicles(vehicles.map(v => v.id === editingId ? { ...formData, id: editingId } : v));
+          await vehicleService.update(editingId!, formData);
+          await loadData(); // Recargar desde Supabase
           showToast.success(SUCCESS_MESSAGES.VEHICLE_UPDATED);
         } else {
-          setDrivers(drivers.map(d => d.id === editingId ? { ...formData, id: editingId } : d));
+          await driverService.update(editingId!, formData);
+          await loadData(); // Recargar desde Supabase
           showToast.success(SUCCESS_MESSAGES.DRIVER_UPDATED);
         }
       }
       setIsModalOpen(false);
       setErrors({});
     } catch (error) {
+      console.error('Error saving:', error);
       showToast.error(ERROR_MESSAGES.SAVE_ERROR);
     } finally {
       setIsSaving(false);
@@ -159,6 +195,17 @@ const FleetManager: React.FC = () => {
     d.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     d.rut.includes(searchTerm)
   );
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen pt-24 px-4 sm:px-6 lg:px-8 bg-dark-950 text-slate-200 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-400">Cargando datos desde Supabase...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pt-24 px-4 sm:px-6 lg:px-8 bg-dark-950 text-slate-200 relative">
@@ -349,6 +396,7 @@ const FleetManager: React.FC = () => {
                       <option value="Idle">Inactivo</option>
                     </select>
                   </div>
+                  <Input label="Ciudad" value={formData.city || ''} onChange={(e: any) => setFormData({ ...formData, city: e.target.value })} placeholder="Ej: Puerto Montt" />
                   <Input label="Próximo Servicio" type="date" value={formData.nextService} onChange={(e: any) => setFormData({ ...formData, nextService: e.target.value })} />
                 </>
               ) : (
