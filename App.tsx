@@ -95,7 +95,7 @@ const App: React.FC = () => {
       </footer>
 
       {/* Test de conexión Supabase (temporal) */}
-      <SupabaseTest />
+      {/* <SupabaseTest /> */}
     </div>
   );
 };
