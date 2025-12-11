@@ -2,14 +2,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AppView } from '../types';
 import { useStore } from '../store/useStore';
-import { LayoutDashboard, Truck, Map, PieChart, Zap, FileCheck, Radar, Smartphone, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, Truck, Map, PieChart, Zap, FileCheck, Radar, Smartphone, Sun, Moon, User, LogOut } from 'lucide-react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { useTheme } from '../hooks/useTheme';
+import { useAuth } from '../contexts/AuthContext';
 
 const Navbar: React.FC = () => {
   const { currentView, setView } = useStore();
   const { theme, toggleTheme } = useTheme();
+  const { profile, signOut } = useAuth();
   const navRef = useRef<HTMLDivElement>(null);
   const linksRef = useRef<(HTMLButtonElement | null)[]>([]);
   const contactRef = useRef<HTMLDivElement>(null);
@@ -19,6 +21,34 @@ const Navbar: React.FC = () => {
   const iconTL = useRef<gsap.core.Timeline | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [showBurger, setShowBurger] = useState(true);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+
+  // Formatear rol para mostrar
+  const formatRole = (role: string | undefined): string => {
+    if (!role) return 'Usuario';
+    const roleMap: Record<string, string> = {
+      'admin': 'Administrador',
+      'fleet_manager': 'Gerente de Flota',
+      'driver': 'Conductor',
+    };
+    return roleMap[role] || 'Usuario';
+  };
+
+  // Obtener iniciales del nombre
+  const getInitials = (name: string | null | undefined): string => {
+    if (!name) return 'U';
+    const names = name.trim().split(' ');
+    if (names.length >= 2) {
+      return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
+    }
+    return name[0].toUpperCase();
+  };
+
+  const handleLogout = async () => {
+    await signOut();
+    setView(AppView.HOME);
+    setShowUserMenu(false);
+  };
 
   const navItems = [
     { id: AppView.DASHBOARD, label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
@@ -128,6 +158,21 @@ const Navbar: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Close user menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showUserMenu) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.user-menu-container')) {
+          setShowUserMenu(false);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showUserMenu]);
+
   return (
     <>
       {/* Main Navbar - Desktop */}
@@ -194,10 +239,49 @@ const Navbar: React.FC = () => {
               )}
             </button>
 
-            {/* Status Indicator - Desktop */}
-            <div className="hidden md:flex items-center gap-3 px-3 py-1.5 rounded-full bg-white/5 border border-white/5">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-xs font-mono text-slate-400">SISTEMA ONLINE</span>
+            {/* User Profile - Desktop */}
+            <div className="hidden md:block relative user-menu-container">
+              <button
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="flex items-center gap-3 px-3 py-2 rounded-lg bg-white/5 border border-white/5 hover:bg-white/10 transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+              >
+                {/* Avatar */}
+                <div className="w-8 h-8 bg-gradient-to-br from-brand-500 to-brand-900 rounded-full flex items-center justify-center text-white text-sm font-bold border border-white/20">
+                  {getInitials(profile?.full_name)}
+                </div>
+                
+                {/* User Info */}
+                <div className="text-left">
+                  <p className="text-sm font-medium text-slate-200">
+                    {profile?.full_name || 'Usuario'}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {formatRole(profile?.role)}
+                  </p>
+                </div>
+              </button>
+
+              {/* Dropdown Menu */}
+              {showUserMenu && (
+                <div className="absolute right-0 mt-2 w-56 bg-dark-900 border border-white/10 rounded-lg shadow-xl z-50">
+                  <div className="p-3 border-b border-white/5">
+                    <p className="text-sm font-medium text-slate-200 truncate">
+                      {profile?.email}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      {formatRole(profile?.role)}
+                    </p>
+                  </div>
+                  
+                  <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-slate-300 hover:bg-white/5 transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Cerrar Sesión
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -233,6 +317,31 @@ const Navbar: React.FC = () => {
 
         {/* Contact Info */}
         <div ref={contactRef} className="flex flex-col gap-6 text-sm">
+          {/* User Profile - Mobile */}
+          <div className="font-light">
+            <p className="tracking-wider text-white/40 uppercase text-xs mb-2">Usuario</p>
+            <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-white/5 border border-white/5">
+              <div className="w-8 h-8 bg-gradient-to-br from-brand-500 to-brand-900 rounded-full flex items-center justify-center text-white text-sm font-bold border border-white/20">
+                {getInitials(profile?.full_name)}
+              </div>
+              <div>
+                <p className="text-sm font-medium text-slate-200">
+                  {profile?.full_name || 'Usuario'}
+                </p>
+                <p className="text-xs text-slate-400">
+                  {formatRole(profile?.role)}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="mt-2 w-full flex items-center gap-3 px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-all duration-300 text-red-400"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="text-sm">Cerrar Sesión</span>
+            </button>
+          </div>
+
           {/* Theme Toggle - Mobile */}
           <div className="font-light">
             <p className="tracking-wider text-white/40 uppercase text-xs mb-2">Apariencia</p>

@@ -1,12 +1,14 @@
 
 
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { useStore } from './store/useStore';
 import { useSupabaseRealtime } from './hooks/useSupabaseRealtime';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Navbar from './components/Navbar';
 import Breadcrumbs from './components/Breadcrumbs';
 import { ToastProvider } from './components/Toast';
 import PageLoader from './components/PageLoader';
+import Unauthorized from './components/unauthorized/Unauthorized';
 
 import SkipLink from './components/SkipLink';
 import Hero from './components/Hero';
@@ -26,13 +28,14 @@ import { AppView } from './types';
 import { enableDemoMode } from './utils/demoData';
 import { showToast } from './components/Toast';
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
   const store = useStore();
   const { currentView, setView } = store;
+  const { profile } = useAuth();
   useSupabaseRealtime();
 
   // Demo Mode: Press Ctrl+Shift+D
-  React.useEffect(() => {
+  useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey && e.key === 'D') {
         e.preventDefault();
@@ -45,7 +48,36 @@ const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, []);
 
+  // Role-based redirection
+  useEffect(() => {
+    if (!profile) return;
+
+    const role = profile.role;
+
+    // Si el usuario es driver, solo puede acceder a DRIVER_MOBILE
+    if (role === 'driver' && currentView !== AppView.DRIVER_MOBILE) {
+      setView(AppView.DRIVER_MOBILE);
+      return;
+    }
+
+    // Si no es admin, no puede acceder a FINANCIALS o COMPLIANCE
+    if (role !== 'admin' && (currentView === AppView.FINANCIALS || currentView === AppView.COMPLIANCE)) {
+      setView(AppView.DASHBOARD);
+      showToast.error('Acceso denegado', 'No tienes permisos para esta sección');
+      return;
+    }
+
+    // Si no es admin ni fleet_manager, no puede acceder a FLEET
+    if (role !== 'admin' && role !== 'fleet_manager' && currentView === AppView.FLEET) {
+      setView(AppView.DASHBOARD);
+      showToast.error('Acceso denegado', 'No tienes permisos para esta sección');
+      return;
+    }
+  }, [currentView, profile, setView]);
+
   const renderView = () => {
+    const role = profile?.role;
+
     switch (currentView) {
       case AppView.HOME:
         return <Hero />;
@@ -54,15 +86,27 @@ const App: React.FC = () => {
       case AppView.TRACKING:
         return <FleetTracking />;
       case AppView.FLEET:
-        return <FleetManager />;
+        // Solo admin o fleet_manager pueden ver esta vista
+        if (role === 'admin' || role === 'fleet_manager') {
+          return <FleetManager />;
+        }
+        return <Unauthorized />;
       case AppView.ROUTES:
         return <RoutePlanner />;
       case AppView.ROUTE_BUILDER:
         return <RouteBuilder />;
       case AppView.FINANCIALS:
-        return <Financials />;
+        // Solo admin puede ver esta vista
+        if (role === 'admin') {
+          return <Financials />;
+        }
+        return <Unauthorized />;
       case AppView.COMPLIANCE:
-        return <Compliance />;
+        // Solo admin puede ver esta vista
+        if (role === 'admin') {
+          return <Compliance />;
+        }
+        return <Unauthorized />;
       case AppView.DRIVER_MOBILE:
         return <DriverMobile />;
       default:
@@ -73,7 +117,6 @@ const App: React.FC = () => {
   return (
     <div className="antialiased text-slate-200 selection:bg-brand-500 selection:text-black font-sans">
       <SkipLink />
-      <ToastProvider />
       <Navbar />
       <Breadcrumbs />
       <main id="main-content" className="bg-dark-950 pt-20">
@@ -97,6 +140,15 @@ const App: React.FC = () => {
       {/* Test de conexión Supabase (temporal) */}
       {/* <SupabaseTest /> */}
     </div>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <AuthProvider>
+      <ToastProvider />
+      <AppContent />
+    </AuthProvider>
   );
 };
 
