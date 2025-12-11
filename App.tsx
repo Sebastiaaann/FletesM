@@ -1,12 +1,14 @@
 
 
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { useStore } from './store/useStore';
 import { useSupabaseRealtime } from './hooks/useSupabaseRealtime';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Navbar from './components/Navbar';
 import Breadcrumbs from './components/Breadcrumbs';
 import { ToastProvider } from './components/Toast';
 import PageLoader from './components/PageLoader';
+import Unauthorized from './components/unauthorized/Unauthorized';
 
 import SkipLink from './components/SkipLink';
 import Hero from './components/Hero';
@@ -25,14 +27,16 @@ const DriverMobile = React.lazy(() => import('./components/DriverMobile'));
 import { AppView } from './types';
 import { enableDemoMode } from './utils/demoData';
 import { showToast } from './components/Toast';
+import { canAccessView, getDefaultViewForRole } from './utils/authUtils';
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
   const store = useStore();
   const { currentView, setView } = store;
+  const { profile } = useAuth();
   useSupabaseRealtime();
 
   // Demo Mode: Press Ctrl+Shift+D
-  React.useEffect(() => {
+  useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey && e.key === 'D') {
         e.preventDefault();
@@ -45,7 +49,30 @@ const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, []);
 
+  // Role-based redirection
+  useEffect(() => {
+    if (!profile) return;
+
+    const role = profile.role;
+
+    // Verificar si el usuario tiene acceso a la vista actual
+    if (!canAccessView(role, currentView)) {
+      const defaultView = getDefaultViewForRole(role);
+      setView(defaultView);
+      showToast.error('Acceso denegado', 'No tienes permisos para esta sección');
+    }
+    // setView es una función estable de Zustand, no necesita estar en las dependencias
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentView, profile]);
+
   const renderView = () => {
+    const role = profile?.role;
+
+    // Defensive rendering: verificar permisos antes de renderizar
+    if (!canAccessView(role, currentView)) {
+      return <Unauthorized />;
+    }
+
     switch (currentView) {
       case AppView.HOME:
         return <Hero />;
@@ -73,7 +100,6 @@ const App: React.FC = () => {
   return (
     <div className="antialiased text-slate-200 selection:bg-brand-500 selection:text-black font-sans">
       <SkipLink />
-      <ToastProvider />
       <Navbar />
       <Breadcrumbs />
       <main id="main-content" className="bg-dark-950 pt-20">
@@ -97,6 +123,15 @@ const App: React.FC = () => {
       {/* Test de conexión Supabase (temporal) */}
       {/* <SupabaseTest /> */}
     </div>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <AuthProvider>
+      <ToastProvider />
+      <AppContent />
+    </AuthProvider>
   );
 };
 
