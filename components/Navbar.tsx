@@ -2,14 +2,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AppView } from '../types';
 import { useStore } from '../store/useStore';
-import { LayoutDashboard, Truck, Map, PieChart, Zap, FileCheck, Radar, Smartphone, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, Truck, Map, PieChart, Zap, FileCheck, Radar, Smartphone, Sun, Moon, LogOut, User } from 'lucide-react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { useTheme } from '../hooks/useTheme';
+import { useAuth } from '../src/hooks/useAuth';
+import { showToast } from './Toast';
 
 const Navbar: React.FC = () => {
   const { currentView, setView } = useStore();
   const { theme, toggleTheme } = useTheme();
+  const { profile, signOut } = useAuth();
   const navRef = useRef<HTMLDivElement>(null);
   const linksRef = useRef<(HTMLButtonElement | null)[]>([]);
   const contactRef = useRef<HTMLDivElement>(null);
@@ -19,6 +22,8 @@ const Navbar: React.FC = () => {
   const iconTL = useRef<gsap.core.Timeline | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [showBurger, setShowBurger] = useState(true);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   const navItems = [
     { id: AppView.DASHBOARD, label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
@@ -50,6 +55,30 @@ const Navbar: React.FC = () => {
       iconTL.current.reverse();
       setIsOpen(false);
     }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      showToast.success('Sesión cerrada', 'Has cerrado sesión correctamente');
+    } catch (error) {
+      showToast.error('Error', 'No se pudo cerrar la sesión');
+    }
+  };
+
+  const formatRole = (role: string | undefined): string => {
+    if (!role) return 'Usuario';
+    const roleMap: Record<string, string> = {
+      admin: 'Administrador',
+      fleet_manager: 'Gerente de Flota',
+      driver: 'Conductor',
+    };
+    return roleMap[role] || role;
+  };
+
+  const getUserInitial = (name: string | null | undefined): string => {
+    if (!name) return 'U';
+    return name.charAt(0).toUpperCase();
   };
 
   // GSAP Animations
@@ -128,15 +157,29 @@ const Navbar: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Close user menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false);
+      }
+    };
+
+    if (showUserMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showUserMenu]);
+
   return (
     <>
       {/* Main Navbar - Desktop */}
-      <nav className="fixed top-0 left-0 w-full z-40 glass-panel border-b border-white/5">
+      <nav className="fixed top-0 left-0 w-full z-40 backdrop-blur-xl bg-dark-900/80 border-b border-white/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-20">
+          <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <div
-              className="flex items-center gap-3 cursor-pointer group focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded-lg p-1"
+              className="flex items-center gap-2.5 cursor-pointer group focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded-lg p-1 -ml-1"
               onClick={() => setView(AppView.HOME)}
               role="button"
               tabIndex={0}
@@ -148,56 +191,112 @@ const Navbar: React.FC = () => {
               }}
               aria-label="Ir al inicio"
             >
-              <div className="relative w-10 h-10 flex items-center justify-center">
-                <div className="absolute inset-0 bg-brand-500/20 rounded-xl blur-md group-hover:blur-lg transition-all"></div>
-                <div className="relative w-full h-full bg-gradient-to-br from-brand-500 to-brand-900 rounded-xl flex items-center justify-center border border-white/10">
-                  <Zap className="text-white w-5 h-5" aria-hidden="true" />
+              <div className="relative w-9 h-9 flex items-center justify-center">
+                <div className="absolute inset-0 bg-brand-500/20 rounded-lg blur-md group-hover:blur-lg transition-all"></div>
+                <div className="relative w-full h-full bg-gradient-to-br from-brand-500 to-brand-700 rounded-lg flex items-center justify-center">
+                  <Zap className="text-white w-4 h-4" aria-hidden="true" />
                 </div>
               </div>
               <div className="flex flex-col">
-                <span className="text-xl font-bold tracking-tighter text-white leading-none">
+                <span className="text-lg font-bold tracking-tight text-white leading-none">
                   FLEET<span className="text-brand-500">TECH</span>
                 </span>
-                <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-semibold">OS Logístico</span>
+                <span className="text-[9px] uppercase tracking-wider text-slate-500 font-medium leading-none mt-0.5">OS Logístico</span>
               </div>
             </div>
 
             {/* Desktop Nav */}
-            <div className="hidden md:block">
-              <div className="ml-10 flex items-center space-x-2">
+            <div className="hidden lg:flex items-center flex-1 justify-center px-8">
+              <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
                 {navItems.map((item) => (
                   <button
                     key={item.id}
                     onClick={() => setView(item.id)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 border ${currentView === item.id
-                      ? 'bg-white/10 text-white border-white/10 shadow-[0_0_15px_rgba(255,255,255,0.1)]'
-                      : 'text-slate-400 border-transparent hover:text-white hover:bg-white/5'
-                      }`}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
+                      currentView === item.id
+                        ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/30'
+                        : 'text-slate-400 hover:text-white hover:bg-white/10'
+                    }`}
                   >
-                    {item.icon}
-                    {item.label}
+                    <span className="w-4 h-4">{item.icon}</span>
+                    <span>{item.label}</span>
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Theme Toggle - Desktop */}
-            <button
-              onClick={toggleTheme}
-              className="hidden md:flex items-center gap-2 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all duration-300 border border-transparent hover:border-white/10"
-              aria-label={`Cambiar a modo ${theme === 'dark' ? 'claro' : 'oscuro'}`}
-            >
-              {theme === 'dark' ? (
-                <Sun className="w-5 h-5" />
-              ) : (
-                <Moon className="w-5 h-5" />
-              )}
-            </button>
+            {/* User Profile Dropdown - Desktop */}
+            <div className="hidden md:block relative" ref={userMenuRef}>
+              <button
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-all duration-200 border border-white/10 hover:border-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                aria-label="Menú de usuario"
+                aria-expanded={showUserMenu}
+              >
+                {/* Avatar */}
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-brand-500/20">
+                  {getUserInitial(profile?.full_name)}
+                </div>
+                {/* User Info */}
+                <div className="flex flex-col items-start min-w-0">
+                  <span className="text-sm font-semibold text-white truncate max-w-[120px]">
+                    {profile?.full_name || 'Usuario'}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-medium">
+                    {formatRole(profile?.role)}
+                  </span>
+                </div>
+                {/* Dropdown indicator */}
+                <svg
+                  className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                    showUserMenu ? 'rotate-180' : ''
+                  }`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
 
-            {/* Status Indicator - Desktop */}
-            <div className="hidden md:flex items-center gap-3 px-3 py-1.5 rounded-full bg-white/5 border border-white/5">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-xs font-mono text-slate-400">SISTEMA ONLINE</span>
+              {/* Dropdown Menu */}
+              {showUserMenu && (
+                <div className="absolute right-0 mt-2 w-56 bg-dark-800/95 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl shadow-black/50 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                  {/* Menu Items */}
+                  <div className="py-1.5">
+                    {/* Theme Toggle */}
+                    <button
+                      onClick={() => {
+                        toggleTheme();
+                        setShowUserMenu(false);
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-all"
+                    >
+                      {theme === 'dark' ? (
+                        <Sun className="w-4 h-4 text-yellow-400" />
+                      ) : (
+                        <Moon className="w-4 h-4 text-blue-400" />
+                      )}
+                      <span className="font-medium">Cambiar tema</span>
+                    </button>
+
+                    {/* Divider */}
+                    <div className="my-1.5 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
+
+                    {/* Logout */}
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        handleLogout();
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-all font-medium"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      <span>Cerrar Sesión</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -213,7 +312,7 @@ const Navbar: React.FC = () => {
           {navItems.map((item, index) => (
             <button
               key={item.id}
-              ref={(el) => (linksRef.current[index] = el)}
+              ref={(el) => { linksRef.current[index] = el; }}
               onClick={() => handleNavClick(item.id)}
               className={`flex items-center gap-4 transition-all duration-300 cursor-pointer uppercase tracking-tight font-bold text-left ${currentView === item.id
                 ? 'text-brand-400 translate-x-2'
@@ -233,6 +332,24 @@ const Navbar: React.FC = () => {
 
         {/* Contact Info */}
         <div ref={contactRef} className="flex flex-col gap-6 text-sm">
+          {/* User Info - Mobile */}
+          <div className="font-light">
+            <p className="tracking-wider text-white/40 uppercase text-xs mb-2">Usuario</p>
+            <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-white/5 border border-white/5">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-white font-semibold border border-white/10">
+                {getUserInitial(profile?.full_name)}
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm font-medium text-white">
+                  {profile?.full_name || 'Usuario'}
+                </span>
+                <span className="text-xs text-slate-500">
+                  {formatRole(profile?.role)}
+                </span>
+              </div>
+            </div>
+          </div>
+
           {/* Theme Toggle - Mobile */}
           <div className="font-light">
             <p className="tracking-wider text-white/40 uppercase text-xs mb-2">Apariencia</p>
@@ -254,12 +371,16 @@ const Navbar: React.FC = () => {
             </button>
           </div>
 
+          {/* Logout - Mobile */}
           <div className="font-light">
-            <p className="tracking-wider text-white/40 uppercase text-xs mb-2">Sistema</p>
-            <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-white/5 border border-white/5 w-fit">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-xs font-mono text-slate-300">ONLINE</span>
-            </div>
+            <p className="tracking-wider text-white/40 uppercase text-xs mb-2">Sesión</p>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-3 px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-all duration-300 w-fit text-red-400 hover:text-red-300"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="text-sm font-medium">Cerrar Sesión</span>
+            </button>
           </div>
 
           <div className="font-light">

@@ -131,7 +131,33 @@ const RouteBuilder: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
 
   const handleInputChange = (field: keyof RouteFormData, value: any) => {
-    setFormData({ ...formData, [field]: value });
+    // 🔒 SANITIZACIÓN DE INPUTS
+    let sanitizedValue = value;
+    
+    if (typeof value === 'string') {
+      // Remover espacios al inicio/final
+      sanitizedValue = value.trim();
+      
+      // Prevenir XSS básico removiendo tags HTML
+      sanitizedValue = sanitizedValue.replace(/<[^>]*>/g, '');
+      
+      // Limitar longitud máxima para campos de texto
+      if (field === 'cargoDescription' && sanitizedValue.length > 500) {
+        sanitizedValue = sanitizedValue.substring(0, 500);
+        showToast('warning', 'La descripción fue truncada a 500 caracteres');
+      }
+      
+      if ((field === 'origin' || field === 'destination') && sanitizedValue.length > 200) {
+        sanitizedValue = sanitizedValue.substring(0, 200);
+      }
+    }
+    
+    // Validar números no negativos
+    if (typeof sanitizedValue === 'number' && sanitizedValue < 0) {
+      sanitizedValue = 0;
+    }
+    
+    setFormData({ ...formData, [field]: sanitizedValue });
   };
 
   const calculateRoute = async () => {

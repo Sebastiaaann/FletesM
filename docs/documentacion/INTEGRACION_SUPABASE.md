@@ -1,0 +1,3 @@
+# INTEGRACION_SUPABASE
+
+...existing content...

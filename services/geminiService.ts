@@ -10,7 +10,68 @@ const SYSTEM_INSTRUCTION = `Eres FleetTech AI, un experto en operaciones logíst
 Tu objetivo es optimizar el rendimiento de la flota, reducir costos y garantizar la seguridad.
 Prioriza insights accionables basados en datos. Responde SIEMPRE en español.`;
 
+// 🔒 RATE LIMITING & CACHE
+// Previene abuso de API y reduce costos
+const responseCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+const requestQueue: number[] = [];
+const MAX_REQUESTS_PER_MINUTE = 10;
+
+const checkRateLimit = (): boolean => {
+  const now = Date.now();
+  const oneMinuteAgo = now - 60000;
+  
+  // Limpiar requests antiguos
+  while (requestQueue.length > 0 && requestQueue[0] < oneMinuteAgo) {
+    requestQueue.shift();
+  }
+  
+  if (requestQueue.length >= MAX_REQUESTS_PER_MINUTE) {
+    console.warn('🚨 Gemini API rate limit alcanzado. Espera 1 minuto.');
+    return false;
+  }
+  
+  requestQueue.push(now);
+  return true;
+};
+
+const getCachedResponse = (key: string): any | null => {
+  const cached = responseCache.get(key);
+  if (!cached) return null;
+  
+  const isExpired = Date.now() - cached.timestamp > CACHE_TTL;
+  if (isExpired) {
+    responseCache.delete(key);
+    return null;
+  }
+  
+  return cached.data;
+};
+
+const setCachedResponse = (key: string, data: any): void => {
+  responseCache.set(key, { data, timestamp: Date.now() });
+};
+
 export const generateSmartQuote = async (description: string, distance: string): Promise<QuoteResult> => {
+  // 🔒 Verificar cache primero
+  const cacheKey = `quote-${description}-${distance}`;
+  const cached = getCachedResponse(cacheKey);
+  if (cached) {
+    console.log('✅ Respuesta desde cache');
+    return cached;
+  }
+  
+  // 🔒 Verificar rate limit
+  if (!checkRateLimit()) {
+    return {
+      estimatedPrice: "$0 - $0",
+      vehicleType: "Rate limit excedido",
+      timeEstimate: "N/A",
+      logisticsAdvice: ["Demasiadas solicitudes. Intenta en 1 minuto."],
+      confidenceScore: 0
+    };
+  }
+  
   try {
     const model = "gemini-2.5-flash";
     
@@ -48,7 +109,10 @@ export const generateSmartQuote = async (description: string, distance: string):
     });
 
     if (response.text) {
-      return JSON.parse(response.text) as QuoteResult;
+      const result = JSON.parse(response.text) as QuoteResult;
+      // 🔒 Guardar en cache
+      setCachedResponse(cacheKey, result);
+      return result;
     }
     throw new Error("No response text generated");
 

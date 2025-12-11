@@ -1,0 +1,3 @@
+# SUPABASE_SETUP
+
+...existing content...

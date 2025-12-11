@@ -1,0 +1,3 @@
+# INTEGRACION_SUPABASE_FIRMA_DIGITAL
+
+...existing content...

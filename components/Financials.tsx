@@ -26,15 +26,6 @@ const Financials: React.FC = () => {
     ]);
     const [processingId, setProcessingId] = useState<number | null>(null);
 
-    // Mock Data for analysis (Expanded) - Now mutable
-    const [mockRouteData, setMockRouteData] = useState([
-        { id: "R-101", route: "Stgo - Valpo", driver: "Carlos Mendoza", vehicle: "V-101", revenue: 450000, cost: 280000, margin: 37, fuel: 120000, maintenance: 50000, wages: 80000, tolls: 30000 },
-        { id: "R-102", route: "Stgo - Concepción", driver: "Ana Silva", vehicle: "V-102", revenue: 1200000, cost: 650000, margin: 45, fuel: 300000, maintenance: 100000, wages: 200000, tolls: 50000 },
-        { id: "R-103", route: "Puerto Montt - Osorno", driver: "Jorge O'Ryan", vehicle: "V-103", revenue: 180000, cost: 160000, margin: 11, fuel: 80000, maintenance: 40000, wages: 30000, tolls: 10000 },
-        { id: "R-104", route: "Antofagasta - Calama", driver: "Luis Toro", vehicle: "V-104", revenue: 850000, cost: 400000, margin: 52, fuel: 150000, maintenance: 80000, wages: 120000, tolls: 50000 },
-        { id: "R-105", route: "Stgo - La Serena", driver: "Carlos Mendoza", vehicle: "V-101", revenue: 600000, cost: 350000, margin: 41, fuel: 140000, maintenance: 60000, wages: 100000, tolls: 50000 },
-    ]);
-
     // Delete confirmation state
     const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
@@ -60,10 +51,10 @@ const Financials: React.FC = () => {
         });
     }, [registeredRoutes]);
 
-    // Combine route data
+    // Use only registered route data
     const rawRouteData = useMemo(() => {
-        return [...mockRouteData, ...registeredRouteData];
-    }, [mockRouteData, registeredRouteData]);
+        return registeredRouteData;
+    }, [registeredRouteData]);
 
     // Filtered Data
     const filteredData = useMemo(() => {
@@ -76,17 +67,8 @@ const Financials: React.FC = () => {
 
     // Delete route handler
     const handleDeleteRoute = (routeId: string) => {
-        // Check if it's from mockRouteData or registeredRoutes
-        const isMockRoute = mockRouteData.some(route => route.id === routeId);
-        
-        if (isMockRoute) {
-            setMockRouteData(prev => prev.filter(route => route.id !== routeId));
-        } else {
-            // If from registeredRoutes, remove from store
-            const removeRoute = useStore.getState().removeRoute;
-            removeRoute(routeId);
-        }
-        
+        const removeRoute = useStore.getState().removeRoute;
+        removeRoute(routeId);
         setDeleteConfirm(null);
     };
 

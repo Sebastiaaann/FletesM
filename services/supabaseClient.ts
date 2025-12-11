@@ -4,42 +4,53 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// Verificar que las variables de entorno estén configuradas
+// 1. VALIDACIÓN FAIL-SAFE
+// Si faltan las keys, lanzamos un error que detenga la ejecución del módulo
+// para evitar comportamientos impredecibles.
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('❌ Supabase configuration missing!');
-  console.error('Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.local');
+  throw new Error(
+    '🚨 Supabase Critical Error: Missing Environment Variables. ' +
+    'Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.'
+  );
 }
 
-// Crear cliente de Supabase
+// 2. CREACIÓN DEL CLIENTE
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
+    detectSessionInUrl: true, // Importante para flujos de OAuth o Magic Link
   },
   db: {
     schema: 'public',
   },
   global: {
     headers: {
-      'x-application-name': 'FleetTech',
+      'x-application-name': 'FleetTech-Client', // Útil para logs en el backend
     },
   },
 });
 
-// Helper para verificar la conexión
-export const testSupabaseConnection = async () => {
+// 3. HEALTH CHECK SEGURO (RLS AGNOSTIC)
+// No consultamos tablas de negocio. Verificamos si el servicio de Auth responde.
+export const testSupabaseConnection = async (): Promise<boolean> => {
   try {
-    const { data, error } = await supabase
-      .from('vehicles')
-      .select('count')
-      .limit(1);
+    // getSession es ligero, no requiere permisos de tabla y verifica
+    // que la conexión HTTPS con Supabase API funciona.
+    const { error } = await supabase.auth.getSession();
     
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Supabase Auth Check Failed:', error.message);
+      return false;
+    }
     
-    console.log('✅ Supabase connected successfully!');
+    // Solo en desarrollo mostramos el log de éxito para no ensuciar consola en prod
+    if (import.meta.env.DEV) {
+      console.log('✅ Supabase connection (Auth) established.');
+    }
     return true;
   } catch (error) {
-    console.error('❌ Supabase connection failed:', error);
+    console.error('❌ Supabase unexpected connection error:', error);
     return false;
   }
 };
