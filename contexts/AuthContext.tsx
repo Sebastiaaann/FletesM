@@ -54,9 +54,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .from('user_profiles')
         .select('*')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle(); // Usa maybeSingle() en lugar de single() para evitar errores si no existe
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching profile:', error);
+        setProfile(null);
+        return;
+      }
       
       if (data) {
         setProfile(data as UserProfile);
@@ -66,7 +70,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setProfile(null);
       }
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      console.error('Unexpected error fetching profile:', error);
       // En caso de error, mantener profile como null
       // La UI mostrará "Usuario" como nombre por defecto
       setProfile(null);

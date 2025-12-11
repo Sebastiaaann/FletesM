@@ -61,7 +61,9 @@ const AppContent: React.FC = () => {
       setView(defaultView);
       showToast.error('Acceso denegado', 'No tienes permisos para esta sección');
     }
-  }, [currentView, profile, setView]);
+    // setView es una función estable de Zustand, no necesita estar en las dependencias
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentView, profile]);
 
   const renderView = () => {
     const role = profile?.role;

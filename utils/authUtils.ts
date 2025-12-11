@@ -3,9 +3,16 @@ import { AppView } from '../types';
 
 /**
  * Verifica si un rol tiene permiso para acceder a una vista específica
+ * @param role - Rol del usuario (undefined si no hay perfil cargado)
+ * @param view - Vista a la que se intenta acceder
+ * @returns true si el usuario tiene permiso, false en caso contrario
  */
 export const canAccessView = (role: UserRole | undefined, view: AppView): boolean => {
-  if (!role) return false;
+  // Si no hay rol definido, solo permitir acceso a HOME
+  if (!role) {
+    console.warn('canAccessView: No role defined, restricting access');
+    return view === AppView.HOME;
+  }
 
   switch (view) {
     case AppView.HOME:
