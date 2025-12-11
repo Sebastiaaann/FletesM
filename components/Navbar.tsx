@@ -160,12 +160,12 @@ const Navbar: React.FC = () => {
 
   // Close user menu when clicking outside
   useEffect(() => {
+    if (!showUserMenu) return;
+
     const handleClickOutside = (event: MouseEvent) => {
-      if (showUserMenu) {
-        const target = event.target as HTMLElement;
-        if (!target.closest('.user-menu-container')) {
-          setShowUserMenu(false);
-        }
+      const target = event.target as HTMLElement;
+      if (!target.closest('.user-menu-container')) {
+        setShowUserMenu(false);
       }
     };
 

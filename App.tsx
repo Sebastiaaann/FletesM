@@ -27,6 +27,7 @@ const DriverMobile = React.lazy(() => import('./components/DriverMobile'));
 import { AppView } from './types';
 import { enableDemoMode } from './utils/demoData';
 import { showToast } from './components/Toast';
+import { canAccessView, getDefaultViewForRole } from './utils/authUtils';
 
 const AppContent: React.FC = () => {
   const store = useStore();
@@ -54,29 +55,21 @@ const AppContent: React.FC = () => {
 
     const role = profile.role;
 
-    // Si el usuario es driver, solo puede acceder a DRIVER_MOBILE
-    if (role === 'driver' && currentView !== AppView.DRIVER_MOBILE) {
-      setView(AppView.DRIVER_MOBILE);
-      return;
-    }
-
-    // Si no es admin, no puede acceder a FINANCIALS o COMPLIANCE
-    if (role !== 'admin' && (currentView === AppView.FINANCIALS || currentView === AppView.COMPLIANCE)) {
-      setView(AppView.DASHBOARD);
+    // Verificar si el usuario tiene acceso a la vista actual
+    if (!canAccessView(role, currentView)) {
+      const defaultView = getDefaultViewForRole(role);
+      setView(defaultView);
       showToast.error('Acceso denegado', 'No tienes permisos para esta sección');
-      return;
-    }
-
-    // Si no es admin ni fleet_manager, no puede acceder a FLEET
-    if (role !== 'admin' && role !== 'fleet_manager' && currentView === AppView.FLEET) {
-      setView(AppView.DASHBOARD);
-      showToast.error('Acceso denegado', 'No tienes permisos para esta sección');
-      return;
     }
   }, [currentView, profile, setView]);
 
   const renderView = () => {
     const role = profile?.role;
+
+    // Defensive rendering: verificar permisos antes de renderizar
+    if (!canAccessView(role, currentView)) {
+      return <Unauthorized />;
+    }
 
     switch (currentView) {
       case AppView.HOME:
@@ -86,27 +79,15 @@ const AppContent: React.FC = () => {
       case AppView.TRACKING:
         return <FleetTracking />;
       case AppView.FLEET:
-        // Solo admin o fleet_manager pueden ver esta vista
-        if (role === 'admin' || role === 'fleet_manager') {
-          return <FleetManager />;
-        }
-        return <Unauthorized />;
+        return <FleetManager />;
       case AppView.ROUTES:
         return <RoutePlanner />;
       case AppView.ROUTE_BUILDER:
         return <RouteBuilder />;
       case AppView.FINANCIALS:
-        // Solo admin puede ver esta vista
-        if (role === 'admin') {
-          return <Financials />;
-        }
-        return <Unauthorized />;
+        return <Financials />;
       case AppView.COMPLIANCE:
-        // Solo admin puede ver esta vista
-        if (role === 'admin') {
-          return <Compliance />;
-        }
-        return <Unauthorized />;
+        return <Compliance />;
       case AppView.DRIVER_MOBILE:
         return <DriverMobile />;
       default:

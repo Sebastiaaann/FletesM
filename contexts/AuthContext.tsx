@@ -60,11 +60,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (data) {
         setProfile(data as UserProfile);
+      } else {
+        // Perfil no encontrado - el usuario debe tener un registro en user_profiles
+        console.warn('User profile not found. User should have a profile in user_profiles table.');
+        setProfile(null);
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
-      // Si no existe el perfil, crear uno por defecto
-      // En producción, esto debería manejarse en el backend
+      // En caso de error, mantener profile como null
+      // La UI mostrará "Usuario" como nombre por defecto
+      setProfile(null);
     }
   };
 
