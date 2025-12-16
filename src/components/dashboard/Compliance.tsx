@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { ShieldCheck, FileText, AlertCircle, CheckCircle2, Clock, Download, Award, FileBarChart, TrendingUp, PackageCheck, Truck, AlertTriangle, ExternalLink, Wrench } from 'lucide-react';
+import { ShieldCheck, FileText, AlertCircle, CheckCircle2, Clock, Download, Award, FileBarChart, TrendingUp, PackageCheck, Truck, AlertTriangle, ExternalLink, Wrench, Eye, Paperclip, X } from 'lucide-react';
 import TableSkeleton from '@components/common/TableSkeleton';
 import { driverService, vehicleService } from '@services/databaseService';
 import { useStore } from '@store/useStore';
@@ -13,11 +13,31 @@ const Compliance: React.FC = () => {
     const [loading, setLoading] = React.useState(true);
     const [drivers, setDrivers] = React.useState<Driver[]>([]);
     const [vehicles, setVehicles] = React.useState<Vehicle[]>([]);
+    const [activeTab, setActiveTab] = React.useState<'labor' | 'documents' | 'iso'>('documents');
+    const [previewFile, setPreviewFile] = React.useState<{url: string, type: string, name: string} | null>(null);
 
     // Maintenance Modal State
     const [showMaintenanceModal, setShowMaintenanceModal] = React.useState(false);
     const [selectedMaintenanceVehicle, setSelectedMaintenanceVehicle] = React.useState<Vehicle | null>(null);
-    const { registeredRoutes, isoSteps, toggleIsoStep } = useStore();
+    const { registeredRoutes } = useStore();
+
+    // ISO Steps State
+    const [isoSteps, setIsoSteps] = React.useState([
+        { step: 'Contexto de la Organización', completed: false },
+        { step: 'Liderazgo', completed: false },
+        { step: 'Planificación', completed: false },
+        { step: 'Apoyo', completed: false },
+        { step: 'Operación', completed: false },
+        { step: 'Evaluación del Desempeño', completed: false },
+        { step: 'Mejora', completed: false },
+        { step: 'Auditoría Interna', completed: false }
+    ]);
+
+    const toggleIsoStep = (stepName: string) => {
+        setIsoSteps(prev => prev.map(step => 
+            step.step === stepName ? { ...step, completed: !step.completed } : step
+        ));
+    };
 
     React.useEffect(() => {
         loadData();
@@ -56,201 +76,44 @@ const Compliance: React.FC = () => {
         setShowMaintenanceModal(true);
     };
 
-    // Generar alertas inteligentes basadas en rutas y vehículos
-    const intelligentAlerts = React.useMemo(() => {
-        const alerts = [];
-        const now = Date.now();
-        const oneHour = 60 * 60 * 1000;
-        const oneDay = 24 * oneHour;
-
-        // Contar rutas por estado
-        const completedRoutes = registeredRoutes.filter(r => r.status === 'Completed').length;
-        const inProgressRoutes = registeredRoutes.filter(r => r.status === 'In Progress').length;
-        const pendingRoutes = registeredRoutes.filter(r => r.status === 'Pending').length;
-
-        // ============ ALERTAS CRÍTICAS ============
-
-        // Alerta: Consumo excesivo de combustible
-        const lowFuelVehicles = vehicles.filter(v => v.fuelLevel < 20 && v.status === 'Active');
-        if (lowFuelVehicles.length > 0) {
-            const vehicle = lowFuelVehicles[0];
-            alerts.push({
-                type: 'critical',
-                icon: AlertCircle,
-                title: 'Consumo Excesivo Detectado',
-                message: `Vehículo ${vehicle.plate} con nivel crítico de combustible (${vehicle.fuelLevel}%)`,
-                timestamp: 'Hace 10m',
-                action: 'Ver detalles del vehículo',
-                onClick: () => handleOpenMaintenance(vehicle),
-                priority: 1
-            });
+    const handlePreviewDocument = (url: string, fileName: string, fileType?: string) => {
+        if (!url) return;
+        
+        // Detectar tipo de archivo automáticamente si no se proporciona
+        let detectedType = fileType;
+        if (!detectedType) {
+            // Intentar detectar por extensión o por data URI
+            if (url.startsWith('data:')) {
+                detectedType = url.split(';')[0].split(':')[1];
+            } else {
+                const ext = url.split('.').pop()?.toLowerCase();
+                if (ext === 'pdf') detectedType = 'application/pdf';
+                else if (['jpg', 'jpeg'].includes(ext || '')) detectedType = 'image/jpeg';
+                else if (ext === 'png') detectedType = 'image/png';
+                else detectedType = 'application/pdf'; // default
+            }
         }
-
-        // Alerta: Rutas en progreso hace más de 8 horas
-        const longRoutes = registeredRoutes.filter(route => {
-            if (route.status !== 'In Progress') return false;
-            const elapsed = now - route.timestamp;
-            return elapsed > (8 * oneHour);
+        
+        setPreviewFile({
+            url: url,
+            type: detectedType || 'application/pdf',
+            name: fileName || 'Documento'
         });
+    };
 
-        if (longRoutes.length > 0) {
-            alerts.push({
-                type: 'warning',
-                icon: Clock,
-                title: 'Rutas Prolongadas',
-                message: `${longRoutes.length} ruta(s) en progreso por más de 8 horas`,
-                action: 'Revisar rutas activas',
-                priority: 2
-            });
+    const handleDownloadDocument = (url: string, fileName: string) => {
+        try {
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = fileName || 'documento';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast.success('Descargando documento...');
+        } catch (error) {
+            showToast.error('Error al descargar', 'No se pudo descargar el archivo');
         }
-
-        // Alerta: Rutas pendientes sin asignar
-        const unassignedRoutes = registeredRoutes.filter(r =>
-            r.status === 'Pending' && (!r.driver || r.driver === 'Conductor')
-        );
-
-        if (unassignedRoutes.length > 0) {
-            alerts.push({
-                type: 'info',
-                icon: AlertTriangle,
-                title: 'Rutas Sin Asignar',
-                message: `${unassignedRoutes.length} ruta(s) pendiente(s) sin conductor`,
-                action: 'Asignar conductores',
-                priority: 3
-            });
-        }
-
-        // Alerta: Alto rendimiento
-        const recentCompleted = registeredRoutes.filter(route => {
-            if (route.status !== 'Completed') return false;
-            const elapsed = now - route.timestamp;
-            return elapsed < oneDay;
-        });
-
-        if (recentCompleted.length >= 3) {
-            alerts.push({
-                type: 'success',
-                icon: TrendingUp,
-                title: 'Alto Rendimiento',
-                message: `${recentCompleted.length} rutas completadas hoy`,
-                action: 'Ver estadísticas',
-                priority: 4
-            });
-        }
-
-        // Alerta: Rutas sin comprobante de entrega
-        const noProofRoutes = registeredRoutes.filter(r =>
-            r.status === 'Completed' && !r.deliveryProof
-        );
-
-        if (noProofRoutes.length > 0) {
-            alerts.push({
-                type: 'critical',
-                icon: FileText,
-                title: 'Comprobantes Faltantes',
-                message: `${noProofRoutes.length} ruta(s) completada(s) sin firma digital`,
-                timestamp: 'Hace 1h',
-                action: 'Solicitar firmas',
-                priority: 1
-            });
-        }
-
-        // ============ ALERTAS DE ADVERTENCIA ============
-
-        // Alerta: Exceso de velocidad (simulado basado en conductores en ruta)
-        const onRouteDrivers = registeredRoutes.filter(r => r.status === 'In Progress' && r.driver);
-        if (onRouteDrivers.length > 0 && drivers.length > 1) {
-            const driver = drivers[1]; // Segundo conductor
-            alerts.push({
-                type: 'warning',
-                icon: AlertTriangle,
-                title: 'Exceso de Velocidad',
-                message: `Conductor ${driver.name} excedió límite en zona urbana (85 km/h)`,
-                timestamp: 'Hace 45m',
-                action: 'Contactar conductor',
-                priority: 2
-            });
-        }
-
-        // Alerta: Vehículo próximo a mantenimiento
-        const maintenanceSoonVehicles = vehicles.filter(v => {
-            const serviceDate = new Date(v.nextService);
-            const daysUntil = (serviceDate.getTime() - now) / oneDay;
-            return daysUntil <= 7 && daysUntil > 0 && v.status === 'Active';
-        });
-
-        if (maintenanceSoonVehicles.length > 0) {
-            const vehicle = maintenanceSoonVehicles[0];
-            alerts.push({
-                type: 'warning',
-                icon: Clock,
-                title: 'Mantenimiento Próximo',
-                message: `Vehículo ${vehicle.plate} requiere servicio en menos de 7 días`,
-                timestamp: 'Hace 3h',
-                action: 'Agendar mantenimiento',
-                onClick: () => handleOpenMaintenance(vehicle),
-                priority: 2
-            });
-        }
-
-        // ============ ALERTAS INFORMATIVAS ============
-
-        // Alerta: Optimización de ruta (basado en rutas pendientes)
-        if (pendingRoutes >= 2) {
-            const pendingRoutesList = registeredRoutes.filter(r => r.status === 'Pending');
-            const totalEstimated = pendingRoutesList.reduce((sum, route) => {
-                const price = parseInt(route.estimatedPrice.replace(/[^0-9]/g, '')) || 0;
-                return sum + price;
-            }, 0);
-            const savings = Math.floor(totalEstimated * 0.12);
-
-            alerts.push({
-                type: 'info',
-                icon: TrendingUp,
-                title: 'Optimización Disponible',
-                message: `${pendingRoutes} rutas pueden consolidarse: Ahorro potencial $${savings.toLocaleString('es-CL')}`,
-                timestamp: 'Hace 2h',
-                action: 'Ver optimización',
-                priority: 4
-            });
-        }
-
-        // Alerta: Conductores activos
-        const activeDrivers = new Set(
-            registeredRoutes
-                .filter(r => r.status === 'In Progress')
-                .map(r => r.driver)
-                .filter(Boolean)
-        );
-
-        if (activeDrivers.size > 0) {
-            alerts.push({
-                type: 'info',
-                icon: Truck,
-                title: 'Conductores en Ruta',
-                message: `${activeDrivers.size} conductor(es) actualmente en ruta con GPS activo`,
-                timestamp: 'Tiempo real',
-                action: 'Ver ubicaciones GPS',
-                priority: 4
-            });
-        }
-
-        // Alerta: Nuevo vehículo agregado
-        if (vehicles.length > 3) {
-            alerts.push({
-                type: 'info',
-                icon: CheckCircle2,
-                title: 'Flota Actualizada',
-                message: `${vehicles.length} vehículos registrados en el sistema`,
-                timestamp: 'Hace 5h',
-                action: 'Ver gestión de flota',
-                priority: 5
-            });
-        }
-
-        // Ordenar por prioridad (1 = más crítico)
-        return alerts.sort((a, b) => a.priority - b.priority);
-    }, [registeredRoutes, vehicles, drivers]);
+    };
 
     // Generar datos de cumplimiento laboral desde conductores reales
     const laborData = drivers.map((driver, index) => {
@@ -298,8 +161,12 @@ const Compliance: React.FC = () => {
             plate: vehicle.plate,
             revTecnica: revTecnica,
             revUrl: revTecnicaDoc?.url,
+            revFileType: revTecnicaDoc?.fileType,
+            revFileName: revTecnicaDoc?.fileName,
             perCirculacion: perCirculacion,
             permisoUrl: permisoDoc?.url,
+            permisoFileType: permisoDoc?.fileType,
+            permisoFileName: permisoDoc?.fileName,
             status,
             vehicleData: vehicle
         };
@@ -347,41 +214,114 @@ const Compliance: React.FC = () => {
     // Render individual document row
     const renderDocRow = (doc: any) => {
         return (
-            <div key={doc.id} className="flex items-center hover:bg-white/5 transition-colors border-b border-white/5">
-                <div className="p-4 w-1/4">
-                    <p className="text-white font-medium flex items-center gap-2">
-                        {doc.plate}
-                        <button
-                            onClick={() => handleOpenMaintenance(doc.vehicleData)}
-                            className="p-1 hover:bg-white/10 rounded-full transition-colors group" title="Ver Historial de Mantenimiento">
-                            <Wrench className="w-3 h-3 text-slate-500 group-hover:text-brand-400" />
-                        </button>
-                    </p>
-                    <p className="text-xs text-slate-500">ID: {doc.id}</p>
-                </div>
-                <div className="p-4 w-1/4">
-                    <div className="font-mono text-sm text-slate-300">{doc.revTecnica}</div>
-                    {doc.revUrl && (
-                        <a href={doc.revUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-brand-400 hover:text-brand-300 flex items-center gap-1 mt-1">
-                            Ver Documento <ExternalLink className="w-3 h-3" />
-                        </a>
-                    )}
-                </div>
-                <div className="p-4 w-1/4">
-                    <div className="font-mono text-sm text-slate-300">{doc.perCirculacion}</div>
-                    {doc.permisoUrl && (
-                        <a href={doc.permisoUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-brand-400 hover:text-brand-300 flex items-center gap-1 mt-1">
-                            Ver Documento <ExternalLink className="w-3 h-3" />
-                        </a>
-                    )}
-                </div>
-                <div className="p-4 w-1/4 text-right">
-                    <span className={`px-2 py-1 rounded text-xs font-bold border ${doc.status === 'Valid' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
-                        doc.status === 'Expired' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
-                            'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
-                        }`}>
-                        {doc.status === 'Valid' ? 'Vigente' : doc.status === 'Expired' ? 'Vencido' : 'Por Vencer'}
+            <div key={doc.id} className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl p-5 transition-all hover:border-brand-500/30 group">
+                {/* Header con Vehículo y Estado */}
+                <div className="flex justify-between items-start mb-4">
+                    <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-slate-800 rounded-lg flex items-center justify-center border border-slate-700">
+                            <Truck className="w-6 h-6 text-slate-400" />
+                        </div>
+                        <div>
+                            <p className="text-white font-bold text-lg flex items-center gap-2">
+                                {doc.plate}
+                                <button
+                                    onClick={() => handleOpenMaintenance(doc.vehicleData)}
+                                    className="p-1.5 hover:bg-white/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100" 
+                                    title="Ver Historial de Mantenimiento">
+                                    <Wrench className="w-4 h-4 text-slate-500 hover:text-brand-400" />
+                                </button>
+                            </p>
+                            <p className="text-xs text-slate-500">ID: {doc.id} • {doc.vehicleData?.model || 'Sin modelo'}</p>
+                        </div>
+                    </div>
+                    <span className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${
+                        doc.status === 'Valid' ? 'bg-green-500/10 text-green-400 border-green-500/30' :
+                        doc.status === 'Expired' ? 'bg-red-500/10 text-red-400 border-red-500/30' :
+                        'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'
+                    }`}>
+                        {doc.status === 'Valid' ? '✓ Vigente' : doc.status === 'Expired' ? '✗ Vencido' : '⚠ Por Vencer'}
                     </span>
+                </div>
+
+                {/* Documentos Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Revisión Técnica */}
+                    <div className="bg-slate-900/50 border border-white/5 rounded-lg p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                            <FileText className="w-4 h-4 text-blue-400" />
+                            <span className="text-xs font-bold text-blue-400 uppercase tracking-wider">Revisión Técnica</span>
+                        </div>
+                        <div className="font-mono text-base text-white mb-2">{doc.revTecnica}</div>
+                        {doc.revUrl ? (
+                            <div className="flex items-center gap-2 mt-3">
+                                <button
+                                    type="button"
+                                    onClick={() => handlePreviewDocument(
+                                        doc.revUrl, 
+                                        doc.revFileName || `Rev_Tecnica_${doc.plate}`,
+                                        doc.revFileType
+                                    )}
+                                    className="flex-1 py-2 px-3 rounded-lg bg-brand-500/20 hover:bg-brand-500/30 text-brand-400 hover:text-brand-300 transition-all text-xs font-medium flex items-center justify-center gap-2"
+                                    title="Vista previa"
+                                >
+                                    <Eye className="w-4 h-4" />
+                                    Vista Previa
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleDownloadDocument(
+                                        doc.revUrl, 
+                                        doc.revFileName || `Rev_Tecnica_${doc.plate}.pdf`
+                                    )}
+                                    className="py-2 px-3 rounded-lg bg-brand-500/20 hover:bg-brand-500/30 text-brand-400 hover:text-brand-300 transition-all"
+                                    title="Descargar archivo"
+                                >
+                                    <Download className="w-4 h-4" />
+                                </button>
+                            </div>
+                        ) : (
+                            <span className="text-xs text-slate-600">Sin documento adjunto</span>
+                        )}
+                    </div>
+
+                    {/* Permiso de Circulación */}
+                    <div className="bg-slate-900/50 border border-white/5 rounded-lg p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                            <FileText className="w-4 h-4 text-purple-400" />
+                            <span className="text-xs font-bold text-purple-400 uppercase tracking-wider">Permiso Circulación</span>
+                        </div>
+                        <div className="font-mono text-base text-white mb-2">{doc.perCirculacion}</div>
+                        {doc.permisoUrl ? (
+                            <div className="flex items-center gap-2 mt-3">
+                                <button
+                                    type="button"
+                                    onClick={() => handlePreviewDocument(
+                                        doc.permisoUrl, 
+                                        doc.permisoFileName || `Permiso_Circulacion_${doc.plate}`,
+                                        doc.permisoFileType
+                                    )}
+                                    className="flex-1 py-2 px-3 rounded-lg bg-brand-500/20 hover:bg-brand-500/30 text-brand-400 hover:text-brand-300 transition-all text-xs font-medium flex items-center justify-center gap-2"
+                                    title="Vista previa"
+                                >
+                                    <Eye className="w-4 h-4" />
+                                    Vista Previa
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleDownloadDocument(
+                                        doc.permisoUrl, 
+                                        doc.permisoFileName || `Permiso_Circulacion_${doc.plate}.pdf`
+                                    )}
+                                    className="py-2 px-3 rounded-lg bg-brand-500/20 hover:bg-brand-500/30 text-brand-400 hover:text-brand-300 transition-all"
+                                    title="Descargar archivo"
+                                >
+                                    <Download className="w-4 h-4" />
+                                </button>
+                            </div>
+                        ) : (
+                            <span className="text-xs text-slate-600">Sin documento adjunto</span>
+                        )}
+                    </div>
                 </div>
             </div>
         );
@@ -391,115 +331,60 @@ const Compliance: React.FC = () => {
         <div className="min-h-screen pt-24 px-4 sm:px-6 lg:px-8 pb-10 bg-dark-950 text-slate-200">
             <div className="max-w-7xl mx-auto animate-fade-in">
 
-                <div className="mb-10">
-                    <h2 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
-                        <ShieldCheck className="w-8 h-8 text-brand-500" />
-                        Cumplimiento y Legal
-                    </h2>
-                    <p className="text-slate-500">Gestión centralizada de normativa laboral, tributaria y certificaciones.</p>
-                </div>
-
-                {/* Intelligent Alerts Section */}
-                {intelligentAlerts.length > 0 && (
-                    <div className="mb-8 space-y-3 animate-fade-in">
-                        <div className="flex items-center gap-2 mb-4">
-                            <AlertCircle className="w-5 h-5 text-brand-500" />
-                            <h3 className="text-lg font-bold text-white">Alertas Inteligentes</h3>
-                            <span className="text-xs bg-brand-500/20 text-brand-400 px-2 py-1 rounded-full border border-brand-500/30">
-                                {intelligentAlerts.length} activa{intelligentAlerts.length > 1 ? 's' : ''}
-                            </span>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {intelligentAlerts.map((alert, index) => {
-                                const Icon = alert.icon;
-                                const typeLabels = {
-                                    critical: 'Crítico',
-                                    warning: 'Advertencia',
-                                    info: 'Info',
-                                    success: 'Éxito'
-                                };
-                                const colors = {
-                                    critical: {
-                                        bg: 'bg-red-500/10',
-                                        border: 'border-red-500/30',
-                                        text: 'text-red-400',
-                                        icon: 'text-red-500',
-                                        badge: 'bg-red-500/20 text-red-300 border-red-500/40'
-                                    },
-                                    warning: {
-                                        bg: 'bg-yellow-500/10',
-                                        border: 'border-yellow-500/30',
-                                        text: 'text-yellow-400',
-                                        icon: 'text-yellow-500',
-                                        badge: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'
-                                    },
-                                    info: {
-                                        bg: 'bg-blue-500/10',
-                                        border: 'border-blue-500/30',
-                                        text: 'text-blue-400',
-                                        icon: 'text-blue-500',
-                                        badge: 'bg-blue-500/20 text-blue-300 border-blue-500/40'
-                                    },
-                                    success: {
-                                        bg: 'bg-green-500/10',
-                                        border: 'border-green-500/30',
-                                        text: 'text-green-400',
-                                        icon: 'text-green-500',
-                                        badge: 'bg-green-500/20 text-green-300 border-green-500/40'
-                                    }
-                                };
-
-                                const color = colors[alert.type as keyof typeof colors];
-                                const label = typeLabels[alert.type as keyof typeof typeLabels];
-
-                                return (
-                                    <div
-                                        key={index}
-                                        className={`${color.bg} ${color.border} border rounded-xl p-4 hover:scale-105 transition-transform cursor-pointer animate-slide-up`}
-                                        style={{ animationDelay: `${index * 0.1}s` }}
-                                        onClick={() => alert.onClick && alert.onClick()}
-                                    >
-                                        {/* Header with badge and timestamp */}
-                                        <div className="flex items-center justify-between mb-3">
-                                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded border ${color.badge}`}>
-                                                {label}
-                                            </span>
-                                            <span className="text-[10px] text-slate-500">
-                                                {alert.timestamp}
-                                            </span>
-                                        </div>
-
-                                        {/* Content */}
-                                        <div className="flex items-start gap-3 mb-3">
-                                            <div className={`${color.bg} p-2 rounded-lg flex-shrink-0`}>
-                                                <Icon className={`w-5 h-5 ${color.icon}`} />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <h4 className={`font-bold ${color.text} text-sm mb-1`}>
-                                                    {alert.title}
-                                                </h4>
-                                                <p className="text-xs text-slate-400 leading-relaxed">
-                                                    {alert.message}
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        {/* Action button */}
-                                        <button className={`w-full ${color.text} text-xs font-semibold py-2 px-3 rounded-lg border ${color.border} hover:bg-white/5 transition-colors`}>
-                                            {alert.action} →
-                                        </button>
-                                    </div>
-                                );
-                            })}
+                {/* Header with Tabs */}
+                <div className="mb-8">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+                        <div>
+                            <h2 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
+                                <ShieldCheck className="w-8 h-8 text-brand-500" />
+                                Cumplimiento y Legal
+                            </h2>
+                            <p className="text-slate-500">Gestión centralizada de normativa laboral, tributaria y certificaciones.</p>
                         </div>
                     </div>
-                )}
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* Tabs */}
+                    <div className="flex justify-center">
+                        <div className="bg-white/5 p-1 rounded-xl border border-white/10 flex gap-1">
+                            <button
+                                onClick={() => setActiveTab('documents')}
+                                className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
+                                    activeTab === 'documents' 
+                                        ? 'bg-brand-600 text-white shadow-lg' 
+                                        : 'text-slate-400 hover:text-white'
+                                }`}
+                            >
+                                <FileText className="w-4 h-4" /> Documentación
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('labor')}
+                                className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
+                                    activeTab === 'labor' 
+                                        ? 'bg-brand-600 text-white shadow-lg' 
+                                        : 'text-slate-400 hover:text-white'
+                                }`}
+                            >
+                                <Clock className="w-4 h-4" /> Control Laboral
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('iso')}
+                                className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
+                                    activeTab === 'iso' 
+                                        ? 'bg-brand-600 text-white shadow-lg' 
+                                        : 'text-slate-400 hover:text-white'
+                                }`}
+                            >
+                                <Award className="w-4 h-4" /> Calidad ISO
+                            </button>
+                        </div>
+                    </div>
+                </div>
 
-                    {/* Column 1: Labor Compliance */}
-                    <div className="lg:col-span-1 space-y-6">
+                {/* TAB: Control Laboral */}
+                {activeTab === 'labor' && (
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        {/* Column 1: Labor Compliance */}
+                        <div className="lg:col-span-1 space-y-6">
                         <div className="glass-panel border border-white/5 rounded-2xl p-6 animate-slide-up">
                             <div className="flex items-center justify-between mb-6">
                                 <h3 className="font-bold text-white flex items-center gap-2">
@@ -639,17 +524,104 @@ const Compliance: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Column 2 & 3: Documents & ISO */}
-                    <div className="lg:col-span-2 space-y-6">
-                        {/* Document Management */}
-                        <div className="glass-panel border border-white/5 rounded-2xl overflow-hidden animate-slide-up" style={{ animationDelay: '0.2s' }}>
-                            <div className="p-6 border-b border-white/5 flex justify-between items-center">
-                                <h3 className="font-bold text-white flex items-center gap-2">
-                                    <FileText className="w-5 h-5 text-brand-500" /> Certificados Digitales
+                        {/* Column 2: Additional Labor Info */}
+                        <div className="lg:col-span-2 space-y-6">
+                            <div className="glass-panel border border-white/5 rounded-2xl p-6 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+                                <h3 className="font-bold text-white flex items-center gap-2 mb-6">
+                                    <TrendingUp className="w-5 h-5 text-brand-500" />
+                                    Resumen Mensual de Cumplimiento
                                 </h3>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-6 text-center">
+                                        <div className="text-3xl font-bold text-green-400 mb-2">
+                                            {laborData.filter(d => d.status === 'OK').length}
+                                        </div>
+                                        <div className="text-xs text-green-300 uppercase tracking-wider">
+                                            Conductores en Norma
+                                        </div>
+                                    </div>
+                                    <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-6 text-center">
+                                        <div className="text-3xl font-bold text-yellow-400 mb-2">
+                                            {laborData.filter(d => d.status === 'Warning').length}
+                                        </div>
+                                        <div className="text-xs text-yellow-300 uppercase tracking-wider">
+                                            Requieren Atención
+                                        </div>
+                                    </div>
+                                    <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-6 text-center">
+                                        <div className="text-3xl font-bold text-red-400 mb-2">
+                                            {laborData.filter(d => d.status === 'Critical').length}
+                                        </div>
+                                        <div className="text-xs text-red-300 uppercase tracking-wider">
+                                            Casos Críticos
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="mt-6 bg-white/5 border border-white/10 rounded-xl p-4">
+                                    <p className="text-sm text-slate-300 mb-2">
+                                        <span className="font-bold text-white">Cumplimiento General:</span> El {Math.round((laborData.filter(d => d.status === 'OK').length / laborData.length) * 100)}% de la flota cumple con la normativa laboral vigente.
+                                    </p>
+                                    <p className="text-xs text-slate-400">
+                                        Sistema de monitoreo conforme a la Ley 21.561 (Art. 25 Bis) sobre control de jornada.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* TAB: Documentación */}
+                {activeTab === 'documents' && (
+                    <div className="space-y-6">
+                        {/* Header y Stats */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                            <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-5 text-center">
+                                <div className="text-3xl font-bold text-green-400 mb-1">
+                                    {docData.filter(d => d.status === 'Valid').length}
+                                </div>
+                                <div className="text-xs text-green-300 uppercase tracking-wider">
+                                    Documentos Vigentes
+                                </div>
+                            </div>
+                            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-5 text-center">
+                                <div className="text-3xl font-bold text-yellow-400 mb-1">
+                                    {docData.filter(d => d.status === 'Expiring').length}
+                                </div>
+                                <div className="text-xs text-yellow-300 uppercase tracking-wider">
+                                    Por Vencer
+                                </div>
+                            </div>
+                            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-5 text-center">
+                                <div className="text-3xl font-bold text-red-400 mb-1">
+                                    {docData.filter(d => d.status === 'Expired').length}
+                                </div>
+                                <div className="text-xs text-red-300 uppercase tracking-wider">
+                                    Vencidos
+                                </div>
+                            </div>
+                            <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-5 text-center">
+                                <div className="text-3xl font-bold text-blue-400 mb-1">
+                                    {docData.length}
+                                </div>
+                                <div className="text-xs text-blue-300 uppercase tracking-wider">
+                                    Total Vehículos
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Document Management */}
+                        <div className="glass-panel border border-white/5 rounded-2xl overflow-hidden animate-slide-up">
+                            <div className="p-6 border-b border-white/5 flex flex-col md:flex-row justify-between md:items-center gap-4">
+                                <div>
+                                    <h3 className="font-bold text-white flex items-center gap-2 text-xl mb-1">
+                                        <FileText className="w-6 h-6 text-brand-500" /> Certificados Digitales
+                                    </h3>
+                                    <p className="text-sm text-slate-400">Gestión centralizada de documentación vehicular</p>
+                                </div>
                                 <button
                                     onClick={handleRenewBatch}
-                                    className="text-xs bg-white text-black px-3 py-1.5 rounded-lg font-bold hover:bg-slate-200 transition-colors">
+                                    className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2.5 rounded-lg font-bold transition-all shadow-lg flex items-center gap-2">
+                                    <FileText className="w-4 h-4" />
                                     Renovar Lote
                                 </button>
                             </div>
@@ -659,24 +631,22 @@ const Compliance: React.FC = () => {
                                     <TableSkeleton />
                                 </div>
                             ) : (
-                                <div className="overflow-hidden">
-                                    {/* Table Header */}
-                                    <div className="flex bg-white/5 text-xs uppercase text-slate-400 font-bold">
-                                        <div className="p-4 w-1/4">Vehículo</div>
-                                        <div className="p-4 w-1/4">Revisión Técnica</div>
-                                        <div className="p-4 w-1/4">Permiso Circulación</div>
-                                        <div className="p-4 w-1/4 text-right">Estado</div>
-                                    </div>
+                                <div className="p-6">
                                     {/* Scrollable Document List */}
-                                    <div className="overflow-y-auto custom-scrollbar" style={{ maxHeight: '400px' }}>
+                                    <div className="space-y-4 max-h-[600px] overflow-y-auto custom-scrollbar pr-2">
                                         {docData.slice(0, 50).map(doc => renderDocRow(doc))}
                                     </div>
                                 </div>
                             )}
                         </div>
+                    </div>
+                )}
 
+                {/* TAB: Calidad ISO */}
+                {activeTab === 'iso' && (
+                    <div className="space-y-6">
                         {/* ISO Certification Tracker */}
-                        <div className="glass-panel border border-white/5 rounded-2xl p-8 relative overflow-hidden animate-slide-up" style={{ animationDelay: '0.3s' }}>
+                        <div className="glass-panel border border-white/5 rounded-2xl p-8 relative overflow-hidden animate-slide-up">
                             <div className="absolute top-0 right-0 w-64 h-64 bg-brand-500/5 rounded-full blur-3xl pointer-events-none"></div>
 
                             <div className="flex flex-col md:flex-row justify-between md:items-center mb-8 gap-4">
@@ -713,8 +683,8 @@ const Compliance: React.FC = () => {
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 relative z-10">
                                 {isoSteps.map((step, idx) => (
                                     <div
-                                        key={idx}
-                                        onClick={() => toggleIsoStep(step.step)}
+                                        key={step.id}
+                                        onClick={() => toggleIsoStep(step.id)}
                                         className={`p-4 rounded-xl border transition-all cursor-pointer hover:border-brand-500/50 ${step.completed
                                             ? 'bg-brand-900/20 border-brand-500/30'
                                             : 'bg-white/5 border-white/5 opacity-60'
@@ -738,9 +708,52 @@ const Compliance: React.FC = () => {
                             </div>
                         </div>
                     </div>
-
-                </div>
+                )}
             </div>
+
+            {/* Modal de Preview de Archivo */}
+            {previewFile && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setPreviewFile(null)}>
+                    <div className="relative bg-dark-900 border border-white/10 w-full max-w-4xl h-[80vh] rounded-2xl shadow-2xl overflow-hidden animate-slide-up" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between p-6 border-b border-white/5">
+                            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                <Eye className="w-5 h-5 text-brand-400" />
+                                Vista Previa: {previewFile.name}
+                            </h3>
+                            <button onClick={() => setPreviewFile(null)} className="text-slate-400 hover:text-white transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-6 h-[calc(100%-80px)] overflow-auto">
+                            {previewFile.type.startsWith('image/') ? (
+                                <img 
+                                    src={previewFile.url} 
+                                    alt={previewFile.name}
+                                    className="max-w-full h-auto mx-auto rounded-lg border border-white/10"
+                                />
+                            ) : previewFile.type === 'application/pdf' ? (
+                                <iframe
+                                    src={previewFile.url}
+                                    className="w-full h-full rounded-lg border border-white/10"
+                                    title={previewFile.name}
+                                />
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                                    <FileText className="w-16 h-16 mb-4" />
+                                    <p>No se puede previsualizar este tipo de archivo</p>
+                                    <button
+                                        onClick={() => handleDownloadDocument(previewFile.url, previewFile.name)}
+                                        className="mt-4 bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+                                    >
+                                        <Download className="w-4 h-4" />
+                                        Descargar
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Maintenance Modal */}
             {showMaintenanceModal && selectedMaintenanceVehicle && (

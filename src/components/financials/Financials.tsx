@@ -11,6 +11,7 @@ import { driverService, vehicleService, financialReportService, transactionServi
 import TransactionManager from './TransactionManager';
 const Financials: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'profit' | 'invoicing' | 'transactions'>('profit');
+    const [profitSubTab, setProfitSubTab] = useState<'dashboard' | 'analysis' | 'reports'>('dashboard');
     const [report, setReport] = useState<FinancialReport | null>(null);
     const [loading, setLoading] = useState(false);
     const registeredRoutes = useStore((state) => state.registeredRoutes);
@@ -225,7 +226,7 @@ const Financials: React.FC = () => {
                 ) : activeTab === 'profit' ? (
                     // --- PROFITABILITY VIEW ---
                     <>
-                        <div className="flex flex-col md:flex-row justify-between items-end mb-8">
+                        <div className="flex flex-col md:flex-row justify-between items-end mb-6">
                             <div>
                                 <h2 className="text-3xl font-bold text-white mb-2">Análisis de Rentabilidad</h2>
                                 <p className="text-slate-500">Inteligencia financiera para maximizar márgenes operativos.</p>
@@ -248,7 +249,31 @@ const Financials: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Filters */}
+                        {/* Sub-tabs for Profitability */}
+                        <div className="flex gap-2 mb-8 border-b border-white/10 pb-4">
+                            <button
+                                onClick={() => setProfitSubTab('dashboard')}
+                                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                                    profitSubTab === 'dashboard' 
+                                        ? 'bg-white/10 text-white border border-white/20' 
+                                        : 'text-slate-400 hover:text-white hover:bg-white/5'
+                                }`}
+                            >
+                                📊 Dashboard
+                            </button>
+                            <button
+                                onClick={() => setProfitSubTab('analysis')}
+                                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                                    profitSubTab === 'analysis' 
+                                        ? 'bg-white/10 text-white border border-white/20' 
+                                        : 'text-slate-400 hover:text-white hover:bg-white/5'
+                                }`}
+                            >
+                                📈 Análisis Detallado
+                            </button>
+                        </div>
+
+                        {/* Common Filters */}
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 bg-white/5 p-4 rounded-xl border border-white/10">
                             <div className="flex flex-col gap-1">
                                 <label className="text-xs text-slate-400 font-bold uppercase">Periodo</label>
@@ -293,6 +318,9 @@ const Financials: React.FC = () => {
                             </div>
                         </div>
 
+                        {/* Sub-tab Content */}
+                        {profitSubTab === 'dashboard' && (
+                        <div className="animate-fade-in">
                         {/* KPIs & Charts */}
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
                             {/* KPI Cards */}
@@ -366,43 +394,13 @@ const Financials: React.FC = () => {
                                 </div>
                             </div>
                         </div>
-
-                        {/* AI Insights (Existing) */}
-                        {report && (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8 animate-slide-up">
-                                <div className="bg-gradient-to-br from-emerald-900/50 to-dark-900 border border-emerald-500/30 p-6 rounded-2xl relative overflow-hidden">
-                                    <div className="absolute -right-4 -top-4 w-24 h-24 bg-emerald-500/20 rounded-full blur-xl"></div>
-                                    <h3 className="text-emerald-400 text-xs font-bold uppercase tracking-wider mb-2">Top Performer</h3>
-                                    <div className="flex items-center gap-3">
-                                        <Award className="w-8 h-8 text-white" />
-                                        <div>
-                                            <p className="text-2xl font-bold text-white">{report.topDriver}</p>
-                                            <p className="text-xs text-slate-400">Conductor Más Rentable</p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="bg-gradient-to-br from-blue-900/50 to-dark-900 border border-blue-500/30 p-6 rounded-2xl relative overflow-hidden">
-                                    <div className="absolute -right-4 -top-4 w-24 h-24 bg-blue-500/20 rounded-full blur-xl"></div>
-                                    <h3 className="text-blue-400 text-xs font-bold uppercase tracking-wider mb-2">Ruta Dorada</h3>
-                                    <div className="flex items-center gap-3">
-                                        <MapPin className="w-8 h-8 text-white" />
-                                        <div>
-                                            <p className="text-xl font-bold text-white leading-tight">{report.mostProfitableRoute}</p>
-                                            <p className="text-xs text-slate-400">Mayor Margen Registrado</p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="bg-gradient-to-br from-purple-900/50 to-dark-900 border border-purple-500/30 p-6 rounded-2xl relative overflow-hidden">
-                                    <h3 className="text-purple-400 text-xs font-bold uppercase tracking-wider mb-2">Oportunidad de Ahorro</h3>
-                                    <p className="text-white font-medium text-sm leading-relaxed">{report.costSavingOpportunity}</p>
-                                </div>
-                            </div>
+                        </div>
                         )}
 
+                        {profitSubTab === 'analysis' && (
+                        <div className="animate-fade-in">
                         {/* Main Data Table */}
-                        <div className="glass-panel border border-white/5 rounded-2xl overflow-hidden animate-slide-up" style={{ animationDelay: '0.1s' }}>
+                        <div className="glass-panel border border-white/5 rounded-2xl overflow-hidden">
                             <div className="p-6 border-b border-white/5 flex justify-between items-center">
                                 <h3 className="font-bold text-white">Desglose por Ruta</h3>
                                 <span className="text-xs text-slate-500 font-mono">DATOS FILTRADOS</span>
@@ -477,6 +475,57 @@ const Financials: React.FC = () => {
                                 </table>
                             </div>
                         </div>
+                        </div>
+                        )}
+
+                        {profitSubTab === 'reports' && (
+                        <div className="animate-fade-in">
+                            <div className="glass-panel border border-white/5 rounded-2xl p-8">
+                                {report ? (
+                                    <div className="space-y-6">
+                                        <div className="border-b border-white/10 pb-4">
+                                            <h3 className="text-2xl font-bold text-white mb-2">Reporte de Rentabilidad IA</h3>
+                                            <p className="text-slate-400 text-sm">Análisis generado por Gemini AI basado en los datos actuales</p>
+                                        </div>
+                                        
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-6">
+                                                <p className="text-emerald-400 text-xs font-bold uppercase mb-2">Conductor Destacado</p>
+                                                <p className="text-2xl font-bold text-white">{report.topDriver}</p>
+                                            </div>
+                                            <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-6">
+                                                <p className="text-blue-400 text-xs font-bold uppercase mb-2">Ruta Más Rentable</p>
+                                                <p className="text-lg font-bold text-white">{report.mostProfitableRoute}</p>
+                                            </div>
+                                            <div className="bg-purple-500/10 border border-purple-500/30 rounded-xl p-6">
+                                                <p className="text-purple-400 text-xs font-bold uppercase mb-2">Oportunidad</p>
+                                                <p className="text-sm text-white">{report.costSavingOpportunity}</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-white/5 rounded-xl p-6">
+                                            <h4 className="text-white font-bold mb-3">Análisis Detallado</h4>
+                                            <p className="text-slate-300 leading-relaxed">{report.summary}</p>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-12">
+                                        <Zap className="w-16 h-16 text-slate-600 mx-auto mb-4" />
+                                        <h3 className="text-xl font-bold text-white mb-2">No hay reportes generados</h3>
+                                        <p className="text-slate-400 mb-6">Genera un reporte con IA para obtener insights profundos sobre tu rentabilidad</p>
+                                        <button
+                                            onClick={handleGenerateReport}
+                                            disabled={loading}
+                                            className="px-8 py-3 bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-lg transition-all inline-flex items-center gap-2 disabled:opacity-50"
+                                        >
+                                            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Zap className="w-5 h-5" />}
+                                            {loading ? 'Generando...' : 'Generar Reporte IA'}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        )}
                     </>
                 ) : activeTab === 'invoicing' ? (
                     // --- INVOICING VIEW ---
@@ -487,12 +536,6 @@ const Financials: React.FC = () => {
                                     <UploadCloud className="w-8 h-8 text-blue-500" /> Portal SII
                                 </h2>
                                 <p className="text-slate-500">Emisión automática de Documentos Tributarios Electrónicos.</p>
-                            </div>
-                            <div className="text-right">
-                                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-900/30 border border-green-500/30">
-                                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                                    <span className="text-xs font-bold text-green-400">CONEXION SII ESTABLE</span>
-                                </div>
                             </div>
                         </div>
 

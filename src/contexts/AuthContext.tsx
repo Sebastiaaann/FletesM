@@ -76,7 +76,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     const initializeAuth = async () => {
       try {
-        // Timeout de seguridad: Si tarda más de 5 segundos, asumir que no hay sesión
+        console.log('🔐 Initializing auth...');
+        
+        // Timeout de seguridad: Si tarda más de 10 segundos, asumir que no hay sesión
         timeoutId = setTimeout(() => {
           if (mounted && loading) {
             console.warn('⚠️ Auth initialization timeout - assuming no session');
@@ -85,22 +87,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setProfile(null);
             setLoading(false);
           }
-        }, 5000);
+        }, 10000);
 
-        // Recuperamos sesión
+        // Recuperamos sesión existente (persistida en localStorage)
         const { data: { session: currentSession }, error } = await supabase.auth.getSession();
 
         // Limpiar timeout si la respuesta llegó a tiempo
         clearTimeout(timeoutId);
 
-        if (error) throw error;
+        if (error) {
+          console.error('❌ Error getting session:', error);
+          throw error;
+        }
 
         if (mounted) {
           if (currentSession?.user) {
+            console.log('✅ Session found, user:', currentSession.user.email);
             setSession(currentSession);
             setUser(currentSession.user);
             await fetchUserProfile(currentSession.user.id);
           } else {
+            console.log('ℹ️ No active session found');
             // Limpieza explícita
             setSession(null);
             setUser(null);

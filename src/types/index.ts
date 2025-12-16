@@ -25,8 +25,11 @@ export interface Vehicle {
   insuranceExpiry?: string; // Fecha de vencimiento del seguro
   documents?: {
     type: string;
-    url: string;
+    url: string; // Base64 o URL externa
     expiry?: string;
+    fileName?: string; // Nombre del archivo adjunto
+    fileSize?: number; // Tamaño en bytes
+    fileType?: string; // MIME type
   }[];
 }
 

@@ -193,8 +193,12 @@ const Navbar: React.FC = () => {
             >
               <div className="relative w-9 h-9 flex items-center justify-center">
                 <div className="absolute inset-0 bg-brand-500/20 rounded-lg blur-md group-hover:blur-lg transition-all"></div>
-                <div className="relative w-full h-full bg-gradient-to-br from-brand-500 to-brand-700 rounded-lg flex items-center justify-center">
-                  <Zap className="text-white w-4 h-4" aria-hidden="true" />
+                <div className="relative w-full h-full bg-white/10 rounded-lg flex items-center justify-center p-1.5">
+                  <img 
+                    src="/logoFTSR.svg" 
+                    alt="FleetTech" 
+                    className="w-full h-full filter brightness-0 invert"
+                  />
                 </div>
               </div>
               <div className="flex flex-col">

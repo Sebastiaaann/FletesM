@@ -35,12 +35,16 @@ interface RouteDB {
  * Transform database route to app route
  */
 function transformRouteFromDB(route: RouteDB): any {
+  // Format price with Chilean format (dot as thousands separator)
+  const price = Math.round(route.estimated_price || 0);
+  const formattedPrice = price.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  
   return {
     id: route.id,
     origin: route.origin,
     destination: route.destination,
     distance: route.distance, // Assumes DB stores "123 km" or just "123"
-    estimatedPrice: `$${(route.estimated_price || 0).toLocaleString('es-CL')}`, // Format number to currency string
+    estimatedPrice: `$${formattedPrice}`, // Format as CLP with dot separator
     vehicleType: route.vehicle_type,
     driver: route.driver,
     vehicle: route.vehicle,
@@ -54,8 +58,8 @@ function transformRouteFromDB(route: RouteDB): any {
  * Transform app route to database route
  */
 function transformRouteToDB(route: RouteCreate): RouteDB {
-  // Strip currency symbols and parse to number
-  const price = parseFloat(route.estimatedPrice.replace(/[^0-9.]/g, '')) || 0;
+  // Strip ALL non-numeric characters (including dots used as thousands separator)
+  const price = parseInt(route.estimatedPrice.replace(/[^0-9]/g, '')) || 0;
 
   return {
     id: route.id,
@@ -312,7 +316,7 @@ function transformDriverFromDB(d: DriverDB): Driver {
 /**
  * Transform app driver to database driver
  */
-function transformDriverToDB(driver: DriverCreate): DriverDB {
+function transformDriverToDB(driver: DriverCreate & { id: string }): DriverDB {
   return {
     id: driver.id,
     name: driver.name,
@@ -359,7 +363,12 @@ export const driverService = {
    */
   async create(driver: DriverCreate): Promise<Driver> {
     try {
-      const dbDriver = transformDriverToDB(driver);
+      // Generate ID if not provided
+      const driverWithId = {
+        ...driver,
+        id: driver.id || crypto.randomUUID()
+      };
+      const dbDriver = transformDriverToDB(driverWithId);
 
       const { data, error } = await supabase
         .from('drivers')
@@ -1111,6 +1120,109 @@ export const transactionService = {
   }
 };
 
+// ISO Steps Service
+interface IsoStepDB {
+  id: string;
+  step: string;
+  completed: boolean;
+  step_order: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface IsoStep {
+  id: string;
+  step: string;
+  completed: boolean;
+  order: number;
+}
+
+export const isoStepService = {
+  async getAll(): Promise<IsoStep[]> {
+    try {
+      const { data, error } = await supabase
+        .from('iso_steps')
+        .select('*')
+        .order('step_order', { ascending: true });
+
+      if (error) throw error;
+
+      return data?.map(d => ({
+        id: d.id,
+        step: d.step,
+        completed: d.completed,
+        order: d.step_order
+      })) || [];
+    } catch (error) {
+      console.error('Error loading ISO steps:', error);
+      // Retornar valores por defecto si falla
+      return [
+        { id: '1', step: 'Auditoría Interna', completed: true, order: 1 },
+        { id: '2', step: 'Gestión de No Conformidades', completed: true, order: 2 },
+        { id: '3', step: 'Revisión por Dirección', completed: false, order: 3 },
+        { id: '4', step: 'Certificación Externa', completed: false, order: 4 },
+      ];
+    }
+  },
+
+  async toggle(stepId: string): Promise<void> {
+    try {
+      // Primero obtener el estado actual
+      const { data: current, error: fetchError } = await supabase
+        .from('iso_steps')
+        .select('completed')
+        .eq('id', stepId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Toggle el estado
+      const { error: updateError } = await supabase
+        .from('iso_steps')
+        .update({ 
+          completed: !current.completed,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', stepId);
+
+      if (updateError) throw updateError;
+    } catch (error) {
+      console.error('Error toggling ISO step:', error);
+      throw error;
+    }
+  },
+
+  async initialize(): Promise<void> {
+    try {
+      // Verificar si ya existen pasos
+      const { data: existing } = await supabase
+        .from('iso_steps')
+        .select('id')
+        .limit(1);
+
+      if (existing && existing.length > 0) {
+        return; // Ya existen pasos, no inicializar
+      }
+
+      // Crear pasos por defecto
+      const defaultSteps = [
+        { step: 'Auditoría Interna', completed: true, step_order: 1 },
+        { step: 'Gestión de No Conformidades', completed: true, step_order: 2 },
+        { step: 'Revisión por Dirección', completed: false, step_order: 3 },
+        { step: 'Certificación Externa', completed: false, step_order: 4 },
+      ];
+
+      const { error } = await supabase
+        .from('iso_steps')
+        .insert(defaultSteps);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error initializing ISO steps:', error);
+    }
+  }
+};
+
 // Exportar todos los servicios
 export default {
   vehicles: vehicleService,
@@ -1122,4 +1234,5 @@ export default {
   analytics: analyticsService,
   financials: financialReportService,
   transactions: transactionService,
+  isoSteps: isoStepService,
 };

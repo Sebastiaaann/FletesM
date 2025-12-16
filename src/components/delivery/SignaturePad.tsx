@@ -25,8 +25,12 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, onCancel, embedded 
     canvas.height = rect.height * 2;
     ctx.scale(2, 2);
 
-    // Estilo de línea (Blanco para contraste en modo oscuro)
-    ctx.strokeStyle = '#FFFFFF';
+    // Fondo blanco para que se vea la firma
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Estilo de línea (Negro para visibilidad)
+    ctx.strokeStyle = '#000000';
     ctx.lineWidth = 3;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -88,7 +92,9 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, onCancel, embedded 
     const ctx = canvas?.getContext('2d');
     if (!ctx || !canvas) return;
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Limpiar y restaurar fondo blanco
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     setIsEmpty(true);
   };
   const saveSignature = () => {

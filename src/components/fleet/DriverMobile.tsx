@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '@store/useStore';
-import { MapPin, Navigation, CheckCircle2, Clock, Truck, AlertCircle, PhoneCall, Package, ArrowRight, Play, Square, Plus, X, Loader2, FileSignature, ExternalLink } from 'lucide-react';
+import { MapPin, Navigation, CheckCircle2, Clock, Truck, AlertCircle, PhoneCall, Package, ArrowRight, Play, Square, Plus, X, Loader2, FileSignature, ExternalLink, User } from 'lucide-react';
 import AddressAutocomplete from '@components/routes/AddressAutocomplete';
 import { generateSmartQuote } from '@services/geminiService';
 import LoadingButton from '@components/common/LoadingButton';
@@ -1225,23 +1225,23 @@ const DriverMobile: React.FC<DriverMobileProps> = ({ driverName = "Conductor" })
 
       {/* Signature Modal */}
       {showSignature && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4 safe-area-top safe-area-bottom">
-          <div className="w-full max-w-lg bg-dark-900 rounded-2xl shadow-2xl overflow-hidden mobile-form">
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-2 md:p-4 overflow-y-auto">
+          <div className="w-full max-w-6xl bg-dark-900 rounded-2xl shadow-2xl overflow-hidden my-4 md:my-8">
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-brand-600 to-brand-500 p-6">
+            <div className="bg-gradient-to-r from-brand-600 to-brand-500 p-4 md:p-6">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
-                    <FileSignature className="w-6 h-6 text-white" />
+                <div className="flex items-center gap-2 md:gap-3">
+                  <div className="p-1.5 md:p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+                    <FileSignature className="w-5 h-5 md:w-6 md:h-6 text-white" />
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-white">Comprobante de Entrega</h3>
-                    <p className="text-sm text-brand-100">Firma del cliente</p>
+                    <h3 className="text-lg md:text-xl font-bold text-white">Comprobante de Entrega</h3>
+                    <p className="text-xs md:text-sm text-brand-100">Firma del cliente</p>
                   </div>
                 </div>
                 <button
                   onClick={handleSignatureCancel}
-                  className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                  className="p-2 hover:bg-white/10 rounded-lg transition-colors flex-shrink-0"
                 >
                   <X className="w-5 h-5 text-white" />
                 </button>
@@ -1249,69 +1249,78 @@ const DriverMobile: React.FC<DriverMobileProps> = ({ driverName = "Conductor" })
             </div>
 
             {/* Modal Content */}
-            <div className="p-6 space-y-4">
+            <div className="p-4 md:p-6 max-h-[calc(100vh-120px)] md:max-h-none overflow-y-auto">
               {/* Route Info */}
               {activeRoute && (
-                <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-2">
-                  <div className="flex items-center gap-2 text-sm text-slate-400">
-                    <MapPin className="w-4 h-4" />
-                    <span>{activeRoute.origin.split(',')[0]} → {activeRoute.destination.split(',')[0]}</span>
+                <div className="bg-white/5 border border-white/10 rounded-xl p-3 md:p-4 space-y-2 mb-4 md:mb-6">
+                  <div className="flex items-center gap-2 text-xs md:text-sm text-slate-400">
+                    <MapPin className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
+                    <span className="truncate">{activeRoute.origin.split(',')[0]} → {activeRoute.destination.split(',')[0]}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-slate-400">
-                    <Clock className="w-4 h-4" />
+                  <div className="flex items-center gap-2 text-xs md:text-sm text-slate-400">
+                    <Clock className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
                     <span>Tiempo: {formatTime(elapsedTime)}</span>
                   </div>
                 </div>
               )}
 
-              {/* Client Information */}
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Nombre del Cliente
-                  </label>
-                  <input
-                    type="text"
-                    value={clientName}
-                    onChange={(e) => setClientName(e.target.value)}
-                    placeholder="Ej: Juan Pérez"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-                  />
+              {/* Horizontal Layout: Form + Signature (Responsive) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                {/* Left Column: Client Information */}
+                <div className="space-y-3 md:space-y-4 order-2 md:order-1">
+                  <h4 className="text-xs md:text-sm font-bold text-white mb-2 md:mb-3 flex items-center gap-2 border-b border-white/10 pb-2">
+                    <User className="w-3 h-3 md:w-4 md:h-4 text-brand-400" /> Información del Cliente
+                  </h4>
+                  
+                  <div>
+                    <label className="block text-xs md:text-sm font-medium text-slate-300 mb-1.5 md:mb-2">
+                      Nombre del Cliente
+                    </label>
+                    <input
+                      type="text"
+                      value={clientName}
+                      onChange={(e) => setClientName(e.target.value)}
+                      placeholder="Ej: Juan Pérez"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 md:px-4 py-2.5 md:py-3 text-sm md:text-base text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs md:text-sm font-medium text-slate-300 mb-1.5 md:mb-2">
+                      RUT/Cédula (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={clientId}
+                      onChange={(e) => setClientId(e.target.value)}
+                      placeholder="Ej: 12.345.678-9"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 md:px-4 py-2.5 md:py-3 text-sm md:text-base text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs md:text-sm font-medium text-slate-300 mb-1.5 md:mb-2">
+                      Observaciones (Opcional)
+                    </label>
+                    <textarea
+                      value={deliveryNotes}
+                      onChange={(e) => setDeliveryNotes(e.target.value)}
+                      placeholder="Ej: Entregado en buen estado"
+                      rows={3}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 md:px-4 py-2.5 md:py-3 text-sm md:text-base text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent resize-none"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    RUT/Cédula (Opcional)
-                  </label>
-                  <input
-                    type="text"
-                    value={clientId}
-                    onChange={(e) => setClientId(e.target.value)}
-                    placeholder="Ej: 12.345.678-9"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Observaciones (Opcional)
-                  </label>
-                  <textarea
-                    value={deliveryNotes}
-                    onChange={(e) => setDeliveryNotes(e.target.value)}
-                    placeholder="Ej: Entregado en buen estado"
-                    rows={2}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent resize-none"
+                {/* Right Column: Signature Pad */}
+                <div className="order-1 md:order-2">
+                  <SignaturePad
+                    onSave={handleSignatureSave}
+                    onCancel={handleSignatureCancel}
+                    embedded={true}
                   />
                 </div>
               </div>
-
-              {/* Signature Pad */}
-              <SignaturePad
-                onSave={handleSignatureSave}
-                onCancel={handleSignatureCancel}
-                embedded={true}
-              />
             </div>
           </div>
         </div>

@@ -66,7 +66,7 @@ export const RutSchema = z.string()
  * Complete Driver schema for creation
  */
 export const DriverCreateSchema = z.object({
-    id: z.string().min(1, 'ID es requerido'),
+    id: z.string().min(1, 'ID es requerido').optional(),
     name: z.string()
         .min(3, 'Nombre debe tener al menos 3 caracteres')
         .max(100, 'Nombre no debe exceder 100 caracteres')

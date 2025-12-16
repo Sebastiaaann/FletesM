@@ -39,8 +39,8 @@ export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKe
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    storage: window.localStorage,
-    storageKey: 'fletesm-auth-token',
+    storageKey: 'supabase.auth.token',
+    flowType: 'pkce',
   },
   db: {
     schema: 'public',

@@ -25,9 +25,13 @@ export const LoginView: React.FC = () => {
         <div className="hidden lg:flex flex-col space-y-8">
           {/* Logo & Title */}
           <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-gradient-to-br from-brand-500 to-brand-600 rounded-2xl shadow-lg shadow-brand-500/20">
-                <Truck className="h-8 w-8 text-white" />
+            <div className="flex items-center gap-6">
+              <div className="p-6 bg-white/10 rounded-3xl shadow-lg shadow-brand-500/20">
+                <img 
+                  src="/logoFTSR.svg" 
+                  alt="FleetTech" 
+                  className="h-24 w-24 filter brightness-0 invert"
+                />
               </div>
               <div>
                 <h1 className="text-4xl font-bold bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
@@ -98,9 +102,13 @@ export const LoginView: React.FC = () => {
         <div className="w-full">
           {/* Mobile Logo */}
           <div className="lg:hidden mb-8 text-center">
-            <div className="inline-flex items-center gap-3 mb-2">
-              <div className="p-2 bg-gradient-to-br from-brand-500 to-brand-600 rounded-xl shadow-lg shadow-brand-500/20">
-                <Truck className="h-6 w-6 text-white" />
+            <div className="inline-flex items-center gap-4 mb-2">
+              <div className="p-3 bg-white/10 rounded-xl shadow-lg shadow-brand-500/20">
+                <img 
+                  src="/logoFTSR.svg" 
+                  alt="FleetTech" 
+                  className="h-10 w-10 filter brightness-0 invert"
+                />
               </div>
               <h1 className="text-3xl font-bold bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
                 FleetTech

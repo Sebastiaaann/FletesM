@@ -32,6 +32,9 @@ interface RouteAnalysis {
 const RouteBuilder: React.FC = () => {
   const { pendingRouteData, clearPendingRouteData, addRoute, registeredRoutes, updateRouteStatus } = useStore();
 
+  // Tab Management
+  const [activeTab, setActiveTab] = useState<'constructor' | 'rutas' | 'analisis'>('constructor');
+
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loadingData, setLoadingData] = useState(true);
@@ -217,7 +220,7 @@ const RouteBuilder: React.FC = () => {
         origin: formData.origin,
         destination: formData.destination,
         distance: `${formData.distance} km`,
-        estimatedPrice: `$${formData.clientQuote.toLocaleString('es-CL')}`,
+        estimatedPrice: `$${formData.clientQuote.toLocaleString('es-CL')} CLP`,
         vehicleType: (aiInsight ? (aiInsight.includes('Grande') ? 'Camión Grande' : aiInsight.includes('Medano') ? 'Camión Mediano' : 'Camión Pequeño') : 'Camión Mediano') as any, // Cast temporarly or map correctly
         driver: formData.driver || 'Asignación Pendiente',
         vehicle: formData.vehicle || undefined,
@@ -259,7 +262,7 @@ const RouteBuilder: React.FC = () => {
     <div className="min-h-screen pt-24 px-4 sm:px-6 lg:px-8 pb-10 bg-dark-950 text-slate-200">
       <div className="max-w-7xl mx-auto animate-fade-in">
 
-        <div className="mb-10">
+        <div className="mb-8">
           <h2 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
             <MapPin className="w-8 h-8 text-brand-500" />
             Constructor de Rutas con Análisis Financiero
@@ -267,7 +270,51 @@ const RouteBuilder: React.FC = () => {
           <p className="text-slate-400">Crea rutas optimizadas y analiza rentabilidad en tiempo real con Gemini AI.</p>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-8">
+        {/* Tab Navigation */}
+        <div className="mb-8 flex gap-4 overflow-x-auto pb-2">
+          <button
+            onClick={() => setActiveTab('constructor')}
+            className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all whitespace-nowrap ${
+              activeTab === 'constructor'
+                ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20'
+                : 'bg-white/5 text-slate-400 hover:bg-white/10 border border-white/10'
+            }`}
+          >
+            <MapPin className="w-5 h-5" />
+            Constructor
+          </button>
+          <button
+            onClick={() => setActiveTab('rutas')}
+            className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all whitespace-nowrap relative ${
+              activeTab === 'rutas'
+                ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20'
+                : 'bg-white/5 text-slate-400 hover:bg-white/10 border border-white/10'
+            }`}
+          >
+            <Truck className="w-5 h-5" />
+            Rutas Guardadas
+            {registeredRoutes.length > 0 && (
+              <span className="ml-1 px-2 py-0.5 bg-white/20 rounded-full text-xs">
+                {registeredRoutes.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('analisis')}
+            className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all whitespace-nowrap ${
+              activeTab === 'analisis'
+                ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20'
+                : 'bg-white/5 text-slate-400 hover:bg-white/10 border border-white/10'
+            }`}
+          >
+            <PieChart className="w-5 h-5" />
+            Rentabilidad
+          </button>
+        </div>
+
+        {/* Constructor Tab */}
+        {activeTab === 'constructor' && (
+          <div className="grid lg:grid-cols-3 gap-8">
 
           <div className="lg:col-span-2 space-y-6">
 
@@ -466,57 +513,164 @@ const RouteBuilder: React.FC = () => {
 
           </div>
         </div>
+        )}
 
-        {registeredRoutes.length > 0 && (
-          <div className="mt-12 glass-panel border border-white/5 rounded-2xl overflow-hidden animate-fade-in">
-            <div className="p-6 border-b border-white/5 flex justify-between items-center">
-              <h3 className="text-lg font-bold text-white">Rutas Guardadas ({registeredRoutes.length})</h3>
-              <span className="text-xs text-slate-500 font-mono">ULTIMAS 10 RUTAS</span>
-            </div>
-            <div className="overflow-x-auto">
+        {/* Rutas Guardadas Tab */}
+        {activeTab === 'rutas' && (
+          <div className="animate-fade-in">
+            {registeredRoutes.length > 0 ? (
+              <div className="glass-panel border border-white/5 rounded-2xl overflow-hidden">
+                <div className="p-6 border-b border-white/5 flex justify-between items-center">
+                  <h3 className="text-lg font-bold text-white">Rutas Guardadas ({registeredRoutes.length})</h3>
+                  <span className="text-xs text-slate-500 font-mono">HISTORIAL COMPLETO</span>
+                </div>
+                <div className="overflow-x-auto">
               <table className="w-full min-w-[800px] text-left">
                 <thead className="bg-white/5 text-xs uppercase text-slate-400">
                   <tr>
                     <th className="p-4">Ruta</th>
                     <th className="p-4">Vehículo</th>
+                    <th className="p-4">Conductor</th>
                     <th className="p-4 text-right">Cotización</th>
                     <th className="p-4">Estado</th>
                     <th className="p-4 text-center">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {registeredRoutes.slice(0, 10).map((route) => (
+                  {registeredRoutes.map((route) => (
                     <tr key={route.id} className="hover:bg-white/5 transition-colors cursor-pointer" onClick={() => setSelectedRoute(route)}>
                       <td className="p-4">
                         <p className="text-white font-medium">{route.origin.split(',')[0]} → {route.destination.split(',')[0]}</p>
                         <p className="text-xs text-slate-500">{route.distance}</p>
                       </td>
-                      <td className="p-4 text-slate-400">{route.vehicleType}</td>
-                      <td className="p-4 text-right font-mono text-slate-300">{route.estimatedPrice}</td>
                       <td className="p-4">
-                        <span className={`px-2 py-1 text-xs rounded font-bold ${route.status === 'Completed' ? 'bg-green-500/10 text-green-400 border border-green-500/20' :
-                          route.status === 'In Progress' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
-                            'bg-slate-800 text-slate-400 border border-slate-700'
+                        <span className="text-slate-300 font-medium">{route.vehicleType}</span>
+                      </td>
+                      <td className="p-4">
+                        <span className="text-slate-400">{route.driver}</span>
+                      </td>
+                      <td className="p-4 text-right font-mono text-slate-300 font-bold">{route.estimatedPrice}</td>
+                      <td className="p-4">
+                        <span className={`px-3 py-1.5 text-xs rounded-lg font-bold ${route.status === 'Completed' ? 'bg-green-500/10 text-green-400 border border-green-500/20' :
+                          route.status === 'In Progress' ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20' :
+                          'bg-orange-500/10 text-orange-400 border border-orange-500/20'
                           }`}>
                           {route.status === 'Pending' ? 'Pendiente' : route.status === 'In Progress' ? 'En Curso' : 'Completada'}
                         </span>
                       </td>
-                      <td className="p-4">
+                      <td className="p-4 text-center">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             setSelectedRoute(route);
                           }}
-                          className="p-2 hover:bg-brand-500/10 text-slate-400 hover:text-brand-400 rounded transition-colors"
+                          className="p-2 hover:bg-brand-500/10 text-slate-400 hover:text-brand-400 rounded-lg transition-colors"
                           title="Ver detalles"
                         >
-                          <Eye className="w-4 h-4" />
+                          <Eye className="w-5 h-5" />
                         </button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+            ) : (
+              <div className="glass-panel border border-white/5 rounded-2xl p-16 text-center">
+                <Truck className="w-20 h-20 text-slate-700 mx-auto mb-6" />
+                <h3 className="text-xl font-bold text-slate-400 mb-2">No hay rutas guardadas</h3>
+                <p className="text-slate-500 mb-6">Crea tu primera ruta en la pestaña Constructor</p>
+                <button
+                  onClick={() => setActiveTab('constructor')}
+                  className="px-6 py-3 bg-brand-500 hover:bg-brand-600 text-white font-bold rounded-xl transition-all inline-flex items-center gap-2"
+                >
+                  <MapPin className="w-5 h-5" />
+                  Ir al Constructor
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Análisis Financiero Tab */}
+        {activeTab === 'analisis' && (
+          <div className="animate-fade-in space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="glass-panel border border-white/5 rounded-2xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-bold text-slate-400 uppercase">Ingresos Totales</h3>
+                  <DollarSign className="w-8 h-8 text-green-400" />
+                </div>
+                <p className="text-3xl font-bold text-white mb-2">
+                  ${registeredRoutes.reduce((acc, route) => acc + parseFloat(route.estimatedPrice.replace(/[^0-9.]/g, '') || '0'), 0).toLocaleString('es-CL')} <span className="text-lg text-slate-400">CLP</span>
+                </p>
+                <p className="text-xs text-slate-500">{registeredRoutes.length} rutas totales</p>
+              </div>
+
+              <div className="glass-panel border border-white/5 rounded-2xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-bold text-slate-400 uppercase">Rutas Activas</h3>
+                  <Truck className="w-8 h-8 text-brand-400" />
+                </div>
+                <p className="text-3xl font-bold text-white mb-2">
+                  {registeredRoutes.filter(r => r.status === 'In Progress').length}
+                </p>
+                <p className="text-xs text-slate-500">En curso actualmente</p>
+              </div>
+
+              <div className="glass-panel border border-white/5 rounded-2xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-bold text-slate-400 uppercase">Pendientes</h3>
+                  <AlertCircle className="w-8 h-8 text-orange-400" />
+                </div>
+                <p className="text-3xl font-bold text-white mb-2">
+                  {registeredRoutes.filter(r => r.status === 'Pending').length}
+                </p>
+                <p className="text-xs text-slate-500">Por asignar</p>
+              </div>
+            </div>
+
+            <div className="glass-panel border border-white/5 rounded-2xl p-6">
+              <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                <PieChart className="w-6 h-6 text-brand-400" />
+                Análisis de Rentabilidad por Ruta
+              </h3>
+              {registeredRoutes.length > 0 ? (
+                <div className="space-y-4">
+                  {registeredRoutes.slice(0, 5).map((route) => (
+                    <div key={route.id} className="p-4 bg-white/5 rounded-xl border border-white/10 hover:border-brand-500/30 transition-all cursor-pointer" onClick={() => setSelectedRoute(route)}>
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex-1">
+                          <p className="text-white font-bold">{route.origin.split(',')[0]} → {route.destination.split(',')[0]}</p>
+                          <p className="text-xs text-slate-500">{route.distance} • {route.vehicleType}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xl font-bold text-brand-400">{route.estimatedPrice}</p>
+                          <span className={`text-xs px-2 py-1 rounded ${
+                            route.status === 'Completed' ? 'bg-green-500/10 text-green-400' :
+                            route.status === 'In Progress' ? 'bg-brand-500/10 text-brand-400' :
+                            'bg-orange-500/10 text-orange-400'
+                          }`}>
+                            {route.status === 'Pending' ? 'Pendiente' : route.status === 'In Progress' ? 'En Curso' : 'Completada'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-brand-500 to-accent-500 transition-all"
+                          style={{ width: route.status === 'Completed' ? '100%' : route.status === 'In Progress' ? '60%' : '20%' }}
+                        ></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <PieChart className="w-16 h-16 text-slate-700 mx-auto mb-4" />
+                  <p className="text-slate-500">No hay datos de rentabilidad aún</p>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -645,7 +799,7 @@ const RouteBuilder: React.FC = () => {
         )}
 
       </div>
-    </div >
+    </div>
   );
 };
 

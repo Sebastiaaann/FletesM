@@ -63,6 +63,15 @@ const Hero: React.FC = () => {
           <span className="text-brand-400 text-xs font-bold tracking-widest uppercase">FleetTech </span>
         </div>
 
+        {/* Logo */}
+        <div className="mb-8 animate-fade-in">
+          <img 
+            src="/logoFTSR.svg" 
+            alt="FleetTech Logo" 
+            className="w-32 h-32 md:w-40 md:h-40 lg:w-48 lg:h-48 mx-auto filter brightness-0 invert opacity-90 hover:opacity-100 transition-opacity"
+          />
+        </div>
+
         <h1 className="text-6xl md:text-8xl lg:text-9xl font-bold text-white mb-8 tracking-tighter leading-[0.95] animate-slide-up">
           Control Total<br />
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-400 via-brand-300 to-accent-400 animate-gradient">

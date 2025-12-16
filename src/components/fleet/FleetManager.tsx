@@ -2,12 +2,15 @@ import React, { useState, useEffect } from 'react';
 import type { Driver, Vehicle, MaintenancePrediction } from '@/types';
 import { predictMaintenance } from '@services/geminiService';
 import { vehicleService, driverService } from '@services/databaseService';
-import { Search, Plus, User, Truck, AlertTriangle, X, Save, Trash2, Edit2, Zap, Activity, Thermometer, FileText } from 'lucide-react';
+import { getVehicleInfo, validateChileanPlate, TEST_PLATES } from '@services/vehicleInfoService';
+import { Search, Plus, User, Truck, AlertTriangle, X, Save, Trash2, Edit2, Zap, Activity, Thermometer, FileText, Download, Paperclip, Eye } from 'lucide-react';
 import { showToast } from '@components/common/Toast';
 import LoadingButton from '@components/common/LoadingButton';
 import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '@utils/errorMessages';
-import { VehicleCreateSchema, VehicleUpdateSchema, DriverCreateSchema, DriverUpdateSchema } from '@/lib/validations';
+import { VehicleCreateSchema, VehicleUpdateSchema, DriverCreateSchema, DriverUpdateSchema, DriverStatus } from '@/lib/validations';
 import MaintenanceManager from './MaintenanceManager';
+import { DriverFormCard, type DriverFormData } from '@/components/ui/driver-form-card';
+import { useConfirm } from '@/components/common/ConfirmDialog';
 
 // Helper: Chilean RUT Formatter
 const formatRut = (rut: string) => {
@@ -21,9 +24,12 @@ const formatRut = (rut: string) => {
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
 const FleetManager: React.FC = () => {
+  const { confirm, ConfirmComponent } = useConfirm();
   const [activeTab, setActiveTab] = useState<'vehicles' | 'drivers'>('vehicles');
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isSearchingPlate, setIsSearchingPlate] = useState(false);
+  const [previewFile, setPreviewFile] = useState<{url: string, type: string, name: string} | null>(null);
 
   // --- STATE MANAGEMENT ---
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -81,8 +87,10 @@ const FleetManager: React.FC = () => {
 
   const handleOpenCreate = () => {
     setModalMode('create');
+    // Establecer fecha por defecto para próximo servicio (3 meses adelante)
+    const defaultNextService = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     setFormData(activeTab === 'vehicles'
-      ? { plate: '', model: '', status: 'Active', mileage: 0, fuelLevel: 100, nextService: '', city: '' }
+      ? { plate: '', model: '', status: 'Active', mileage: 0, fuelLevel: 100, nextService: defaultNextService, city: '' }
       : { name: '', rut: '', licenseType: 'A1', licenseExpiry: '', status: 'Available' }
     );
     setErrors({});
@@ -97,6 +105,120 @@ const FleetManager: React.FC = () => {
     setIsModalOpen(true);
   };
 
+  const handleFileUpload = async (type: string, file: File) => {
+    if (!file) return;
+
+    // Validar tamaño (máximo 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      showToast.error('Archivo muy grande', 'El archivo debe ser menor a 5MB');
+      return;
+    }
+
+    // Validar tipo de archivo
+    const validTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+    if (!validTypes.includes(file.type)) {
+      showToast.error('Tipo de archivo no válido', 'Solo se permiten PDF, JPG o PNG');
+      return;
+    }
+
+    try {
+      // Convertir archivo a base64
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      // Actualizar documento con el archivo
+      const currentDocs = formData.documents || [];
+      const otherDocs = currentDocs.filter((d: any) => d.type !== type);
+      const targetDoc = currentDocs.find((d: any) => d.type === type) || { type };
+      
+      setFormData({
+        ...formData,
+        documents: [...otherDocs, { 
+          ...targetDoc, 
+          url: base64,
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: file.type
+        }]
+      });
+
+      showToast.success('Archivo cargado', file.name);
+    } catch (error) {
+      showToast.error('Error al cargar archivo', 'No se pudo procesar el archivo');
+    }
+  };
+
+  const handleDownloadDocument = (doc: any) => {
+    if (!doc.url) return;
+    
+    try {
+      // Crear un enlace temporal para descargar
+      const link = document.createElement('a');
+      link.href = doc.url;
+      link.download = doc.fileName || `${doc.type}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      showToast.success('Descargando archivo', doc.fileName || doc.type);
+    } catch (error) {
+      showToast.error('Error al descargar', 'No se pudo descargar el archivo');
+    }
+  };
+
+  const handlePreviewDocument = (doc: any) => {
+    if (!doc.url) return;
+    setPreviewFile({
+      url: doc.url,
+      type: doc.fileType || 'application/pdf',
+      name: doc.fileName || doc.type
+    });
+  };
+
+  const handleSearchPlate = async () => {
+    const plate = formData.plate?.trim();
+    
+    if (!plate) {
+      showToast.warning('Ingresa una patente', 'Debes ingresar una patente para buscar');
+      return;
+    }
+
+    if (!validateChileanPlate(plate)) {
+      showToast.warning('Formato inválido', 'Formato válido: LLLLNN (ej: BCYT91) o LLNNNN (ej: AB1234)');
+      return;
+    }
+
+    setIsSearchingPlate(true);
+    
+    try {
+      const vehicleInfo = await getVehicleInfo(plate);
+      
+      // Auto-fill form with API data
+      setFormData(prev => ({
+        ...prev,
+        plate: vehicleInfo.plate,
+        model: `${vehicleInfo.make} ${vehicleInfo.model} (${vehicleInfo.year})`,
+        // Keep other fields as they are
+      }));
+      
+      showToast.success('Vehículo encontrado', `${vehicleInfo.make} ${vehicleInfo.model} - ${vehicleInfo.year}`);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'No se pudo obtener información';
+      showToast.error('Error al buscar patente', errorMsg);
+      
+      // Show test plates hint if using test API
+      if (errorMsg.includes('No se encontraron datos')) {
+        showToast.info('Patentes de prueba disponibles', `Ejemplo: ${TEST_PLATES[0]}, ${TEST_PLATES[1]}, ${TEST_PLATES[2]}...`);
+      }
+    } finally {
+      setIsSearchingPlate(false);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     const itemName = activeTab === 'vehicles' ? 'vehículo' : 'conductor';
     const item = activeTab === 'vehicles'
@@ -107,21 +229,29 @@ const FleetManager: React.FC = () => {
       ? (item as Vehicle)?.plate || id
       : (item as Driver)?.name || id;
 
-    if (!confirm(`¿Estás seguro de que deseas eliminar ${itemName} "${itemLabel}"?\n\nEsta acción no se puede deshacer.`)) return;
+    const title = activeTab === 'vehicles' ? 'Eliminar Vehículo' : 'Eliminar Conductor';
+    const message = `¿Estás seguro de que deseas eliminar ${itemName} "${itemLabel}"?\n\nEsta acción no se puede deshacer.`;
 
-    try {
-      if (activeTab === 'vehicles') {
-        await vehicleService.delete(id);
-        setVehicles(prev => prev.filter(v => v.id !== id));
-        showToast.success(`Vehículo ${itemLabel} eliminado`, 'El vehículo ha sido eliminado exitosamente');
-      } else {
-        await driverService.delete(id);
-        setDrivers(prev => prev.filter(d => d.id !== id));
-        showToast.success(`Conductor ${itemLabel} eliminado`, 'El conductor ha sido eliminado exitosamente');
-      }
-    } catch (error) {
-      showToast.error('Error al eliminar', error instanceof Error ? error.message : 'Intenta nuevamente');
-    }
+    confirm(
+      title,
+      message,
+      async () => {
+        try {
+          if (activeTab === 'vehicles') {
+            await vehicleService.delete(id);
+            setVehicles(prev => prev.filter(v => v.id !== id));
+            showToast.success(`Vehículo ${itemLabel} eliminado`, 'El vehículo ha sido eliminado exitosamente');
+          } else {
+            await driverService.delete(id);
+            setDrivers(prev => prev.filter(d => d.id !== id));
+            showToast.success(`Conductor ${itemLabel} eliminado`, 'El conductor ha sido eliminado exitosamente');
+          }
+        } catch (error) {
+          showToast.error('Error al eliminar', error instanceof Error ? error.message : 'Intenta nuevamente');
+        }
+      },
+      'danger'
+    );
   };
 
   const handleSave = async () => {
@@ -130,10 +260,18 @@ const FleetManager: React.FC = () => {
     try {
       // Validate with Zod
       if (modalMode === 'create') {
+        // Generar UUID válido
+        const uuid = crypto.randomUUID();
+        
         const newItem = {
           ...formData,
-          id: `${activeTab === 'vehicles' ? 'V' : 'D'}-${Date.now()}`,
-          status: formData.status || (activeTab === 'vehicles' ? 'Idle' : 'Available')
+          id: uuid,
+          status: formData.status || (activeTab === 'vehicles' ? 'Idle' : 'Available'),
+          // Asegurar valores numéricos
+          mileage: Number(formData.mileage) || 0,
+          fuelLevel: Number(formData.fuelLevel) || 100,
+          // Asegurar que nextService no esté vacío
+          nextService: formData.nextService || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         };
 
         if (activeTab === 'vehicles') {
@@ -144,12 +282,18 @@ const FleetManager: React.FC = () => {
             // Extract errors from Zod
             const zodErrors: any = {};
             const issues = (validationResult.error as any)?.issues ?? (validationResult.error as any)?.errors ?? [];
+            console.error('Errores de validación:', issues);
             issues.forEach((err: any) => {
               const field = err.path[0] as string;
               zodErrors[field] = err.message;
             });
             setErrors(zodErrors);
-            showToast.warning('Por favor corrige los errores en el formulario');
+            
+            // Mostrar mensaje más detallado
+            const errorFields = Object.keys(zodErrors).join(', ');
+            showToast.warning('Errores en el formulario', `Campos con error: ${errorFields}`);
+            console.log('Datos enviados:', newItem);
+            console.log('Errores:', zodErrors);
             setIsSaving(false);
             return;
           }
@@ -359,10 +503,24 @@ const FleetManager: React.FC = () => {
                       </td>
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => handleOpenEdit(driver)} className="p-2 hover:bg-brand-500/20 rounded-lg text-slate-400 hover:text-brand-400 transition-colors">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenEdit(driver);
+                            }} 
+                            className="p-2 hover:bg-brand-500/20 rounded-lg text-slate-400 hover:text-brand-400 transition-colors"
+                            title="Editar conductor"
+                          >
                             <Edit2 className="w-4 h-4" />
                           </button>
-                          <button onClick={() => handleDelete(driver.id)} className="p-2 hover:bg-red-500/20 rounded-lg text-slate-400 hover:text-red-400 transition-colors">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(driver.id);
+                            }} 
+                            className="p-2 hover:bg-red-500/20 rounded-lg text-slate-400 hover:text-red-400 transition-colors"
+                            title="Eliminar conductor"
+                          >
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
@@ -378,7 +536,6 @@ const FleetManager: React.FC = () => {
                     <th className="p-4">Patente / Modelo</th>
                     <th className="p-4">Kilometraje</th>
                     <th className="p-4">Estado</th>
-                    <th className="p-4">Predicción AI</th>
                     <th className="p-4 text-right">Acciones</th>
                   </tr>
                 </thead>
@@ -402,27 +559,36 @@ const FleetManager: React.FC = () => {
                       <td className="p-4">
                         <StatusBadge status={vehicle.status} />
                       </td>
-                      <td className="p-4">
-                        <button
-                          onClick={() => runPrediction(vehicle)}
-                          className="flex items-center gap-1.5 text-xs font-bold text-accent-400 bg-accent-500/10 px-3 py-1.5 rounded-full border border-accent-500/20 hover:bg-accent-500/20 transition-colors"
-                        >
-                          <Zap className="w-3 h-3" /> Analizar
-                        </button>
-                      </td>
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
-                            onClick={() => setMaintenanceVehicle(vehicle)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMaintenanceVehicle(vehicle);
+                            }}
                             className="p-2 hover:bg-brand-500/20 rounded-lg text-slate-400 hover:text-brand-400 transition-colors"
                             title="Historial de Mantenimiento"
                           >
                             <ToolsIcon className="w-4 h-4" />
                           </button>
-                          <button onClick={() => handleOpenEdit(vehicle)} className="p-2 hover:bg-brand-500/20 rounded-lg text-slate-400 hover:text-brand-400 transition-colors">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenEdit(vehicle);
+                            }} 
+                            className="p-2 hover:bg-brand-500/20 rounded-lg text-slate-400 hover:text-brand-400 transition-colors"
+                            title="Editar vehículo"
+                          >
                             <Edit2 className="w-4 h-4" />
                           </button>
-                          <button onClick={() => handleDelete(vehicle.id)} className="p-2 hover:bg-red-500/20 rounded-lg text-slate-400 hover:text-red-400 transition-colors">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(vehicle.id);
+                            }} 
+                            className="p-2 hover:bg-red-500/20 rounded-lg text-slate-400 hover:text-red-400 transition-colors"
+                            title="Eliminar vehículo"
+                          >
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
@@ -438,9 +604,9 @@ const FleetManager: React.FC = () => {
 
       {/* --- CRUD MODAL --- */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 overflow-y-auto">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
-          <div className="relative bg-dark-900 border border-white/10 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-slide-up">
+          <div className="relative bg-dark-900 border border-white/10 w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden animate-slide-up my-8">
             <div className="flex items-center justify-between p-6 border-b border-white/5">
               <h3 className="text-xl font-bold text-white">
                 {modalMode === 'create' ? 'Agregar' : 'Editar'} {activeTab === 'vehicles' ? 'Vehículo' : 'Conductor'}
@@ -449,45 +615,79 @@ const FleetManager: React.FC = () => {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
+            <div className="p-6">
               {activeTab === 'vehicles' ? (
                 <>
-                  <Input
-                    label="Patente"
-                    value={formData.plate}
-                    onChange={(e: any) => {
-                      setFormData({ ...formData, plate: e.target.value.toUpperCase() });
-                      if (errors.plate) {
-                        setErrors(prev => ({ ...prev, plate: undefined }));
-                      }
-                    }}
-                    error={errors.plate}
-                    placeholder="Ejemplo: AABB12, K9 (Máx 6)"
-                  />
-                  <Input label="Modelo" value={formData.model} onChange={(e: any) => setFormData({ ...formData, model: e.target.value })} error={errors.model} placeholder="Volvo FH16" />
-                  <div className="grid grid-cols-2 gap-4">
-                    <Input label="Kilometraje (km)" type="number" value={formData.mileage} onChange={(e: any) => setFormData({ ...formData, mileage: Number(e.target.value) })} />
-                    <Input label="Nivel Combustible (%)" type="number" value={formData.fuelLevel} onChange={(e: any) => setFormData({ ...formData, fuelLevel: Number(e.target.value) })} max={100} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Estado</label>
-                    <select value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })} className="w-full bg-dark-950 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-brand-500 outline-none">
-                      <option value="Active">Activo</option>
-                      <option value="Maintenance">En Mantenimiento</option>
-                      <option value="Idle">Inactivo</option>
-                    </select>
-                  </div>
-                  <Input label="Ciudad" value={formData.city || ''} onChange={(e: any) => setFormData({ ...formData, city: e.target.value })} placeholder="Ej: Puerto Montt" />
-                  <div className="grid grid-cols-2 gap-4">
-                    <Input label="Próximo Servicio" type="date" value={formData.nextService} onChange={(e: any) => setFormData({ ...formData, nextService: e.target.value })} />
-                    <Input label="Vencimiento Seguro" type="date" value={formData.insuranceExpiry || ''} onChange={(e: any) => setFormData({ ...formData, insuranceExpiry: e.target.value })} placeholder="Vencimiento Seguro" />
-                  </div>
+                  {/* Grid de 2 columnas para expansión horizontal */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Columna Izquierda - Información Básica */}
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2 border-b border-white/10 pb-2">
+                        <Truck className="w-4 h-4 text-brand-400" /> Información Básica
+                      </h4>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Patente</label>
+                        <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={formData.plate || ''}
+                        onChange={(e) => {
+                          setFormData({ ...formData, plate: e.target.value.toUpperCase() });
+                          if (errors.plate) {
+                            setErrors(prev => ({ ...prev, plate: undefined }));
+                          }
+                        }}
+                        placeholder="Ej: BCYT91 o AB1234"
+                        maxLength={6}
+                        className={`flex-1 bg-dark-950 border ${errors.plate ? 'border-red-500' : 'border-white/10'} rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-brand-500 outline-none`}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSearchPlate}
+                        disabled={isSearchingPlate || !formData.plate}
+                        className="bg-brand-600 hover:bg-brand-700 disabled:bg-slate-700 disabled:cursor-not-allowed text-white px-4 py-2.5 rounded-lg font-medium transition-all flex items-center gap-2 min-w-[100px] justify-center"
+                      >
+                        {isSearchingPlate ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                            <span className="text-sm">Buscando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Search className="w-4 h-4" />
+                            <span className="text-sm">Buscar</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                        {errors.plate && <p className="text-red-400 text-xs mt-1">{errors.plate}</p>}
+                        <p className="text-slate-500 text-xs mt-1">Formato: LLLLNN (nuevo) o LLNNNN (antiguo)</p>
+                      </div>
+                      <Input label="Modelo" value={formData.model} onChange={(e: any) => setFormData({ ...formData, model: e.target.value })} error={errors.model} placeholder="Volvo FH16" />
+                      <div className="grid grid-cols-2 gap-4">
+                        <Input label="Kilometraje (km)" type="number" value={formData.mileage || 0} onChange={(e: any) => setFormData({ ...formData, mileage: Number(e.target.value) })} error={errors.mileage} />
+                        <Input label="Nivel Combustible (%)" type="number" value={formData.fuelLevel || 100} onChange={(e: any) => setFormData({ ...formData, fuelLevel: Number(e.target.value) })} max={100} error={errors.fuelLevel} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Estado</label>
+                        <select value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })} className="w-full bg-dark-950 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-brand-500 outline-none">
+                          <option value="Active">Activo</option>
+                          <option value="Maintenance">En Mantenimiento</option>
+                          <option value="Idle">Inactivo</option>
+                        </select>
+                      </div>
+                      <Input label="Ciudad" value={formData.city || ''} onChange={(e: any) => setFormData({ ...formData, city: e.target.value })} placeholder="Ej: Puerto Montt" error={errors.city} />
+                      <div className="grid grid-cols-2 gap-4">
+                        <Input label="Próximo Servicio" type="date" value={formData.nextService || ''} onChange={(e: any) => setFormData({ ...formData, nextService: e.target.value })} error={errors.nextService} />
+                        <Input label="Vencimiento Seguro" type="date" value={formData.insuranceExpiry || ''} onChange={(e: any) => setFormData({ ...formData, insuranceExpiry: e.target.value })} placeholder="Vencimiento Seguro" error={errors.insuranceExpiry} />
+                      </div>
+                    </div>
 
-                  {/* Document Management Section */}
-                  <div className="border-t border-white/10 pt-4 mt-4">
-                    <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-brand-400" /> Documentación
-                    </h4>
+                    {/* Columna Derecha - Documentación */}
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2 border-b border-white/10 pb-2">
+                        <FileText className="w-4 h-4 text-brand-400" /> Documentación
+                      </h4>
 
                     {/* Helper to update specific document type */}
                     {(() => {
@@ -503,85 +703,227 @@ const FleetManager: React.FC = () => {
                       };
 
                       return (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-4">
                           {/* Revisión Técnica */}
-                          <div className="bg-white/5 p-3 rounded-lg border border-white/5">
-                            <span className="text-xs font-bold text-slate-300 block mb-2 flex items-center gap-2">
-                              <span className="w-1.5 h-1.5 rounded-full bg-brand-400"></span> Revisión Técnica
-                            </span>
-                            <div className="space-y-3">
+                          <div className="bg-gradient-to-br from-brand-500/10 to-brand-600/5 p-5 rounded-xl border border-brand-400/20 shadow-lg">
+                            <div className="flex items-center gap-2 mb-4">
+                              <div className="w-8 h-8 rounded-lg bg-brand-500/20 flex items-center justify-center">
+                                <FileText className="w-4 h-4 text-brand-400" />
+                              </div>
+                              <h5 className="text-sm font-bold text-white">Revisión Técnica</h5>
+                            </div>
+                            <div className="space-y-4">
                               <Input
                                 label="Vencimiento"
                                 type="date"
                                 value={getDoc('Revisión Técnica').expiry || ''}
                                 onChange={(e: any) => updateDoc('Revisión Técnica', 'expiry', e.target.value)}
                               />
-                              <Input
-                                label="URL Documento"
-                                placeholder="https://..."
-                                value={getDoc('Revisión Técnica').url || ''}
-                                onChange={(e: any) => updateDoc('Revisión Técnica', 'url', e.target.value)}
-                              />
+                              <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Documento</label>
+                                {!getDoc('Revisión Técnica').fileName ? (
+                                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-brand-400/30 rounded-xl cursor-pointer bg-brand-500/5 hover:bg-brand-500/10 transition-all group">
+                                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                      <FileText className="w-10 h-10 text-brand-400 mb-2 group-hover:scale-110 transition-transform" />
+                                      <p className="text-sm text-slate-300 font-medium">Click para adjuntar archivo</p>
+                                      <p className="text-xs text-slate-500 mt-1">PDF, JPG o PNG (máx. 5MB)</p>
+                                    </div>
+                                    <input
+                                      type="file"
+                                      className="hidden"
+                                      accept=".pdf,.jpg,.jpeg,.png"
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) handleFileUpload('Revisión Técnica', file);
+                                      }}
+                                    />
+                                  </label>
+                                ) : (
+                                  <div className="bg-green-500/10 border-2 border-green-500/30 rounded-xl p-4">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                                        <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                                          <Paperclip className="w-5 h-5 text-green-400" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-sm font-medium text-green-400 truncate">{getDoc('Revisión Técnica').fileName}</p>
+                                          <p className="text-xs text-green-400/60 mt-1">Archivo adjunto correctamente</p>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-2 flex-shrink-0">
+                                        <button
+                                          type="button"
+                                          onClick={() => handlePreviewDocument(getDoc('Revisión Técnica'))}
+                                          className="p-2 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 hover:text-green-300 transition-all"
+                                          title="Vista previa"
+                                        >
+                                          <Eye className="w-5 h-5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDownloadDocument(getDoc('Revisión Técnica'))}
+                                          className="p-2 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 hover:text-green-300 transition-all"
+                                          title="Descargar archivo"
+                                        >
+                                          <Download className="w-5 h-5" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
 
                           {/* Permiso de Circulación */}
-                          <div className="bg-white/5 p-3 rounded-lg border border-white/5">
-                            <span className="text-xs font-bold text-slate-300 block mb-2 flex items-center gap-2">
-                              <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span> Permiso de Circulación
-                            </span>
-                            <div className="space-y-3">
+                          <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 p-5 rounded-xl border border-blue-400/20 shadow-lg">
+                            <div className="flex items-center gap-2 mb-4">
+                              <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                                <FileText className="w-4 h-4 text-blue-400" />
+                              </div>
+                              <h5 className="text-sm font-bold text-white">Permiso de Circulación</h5>
+                            </div>
+                            <div className="space-y-4">
                               <Input
                                 label="Vencimiento"
                                 type="date"
                                 value={getDoc('Permiso Circulación').expiry || ''}
                                 onChange={(e: any) => updateDoc('Permiso Circulación', 'expiry', e.target.value)}
                               />
-                              <Input
-                                label="URL Documento"
-                                placeholder="https://..."
-                                value={getDoc('Permiso Circulación').url || ''}
-                                onChange={(e: any) => updateDoc('Permiso Circulación', 'url', e.target.value)}
-                              />
+                              <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Documento</label>
+                                {!getDoc('Permiso Circulación').fileName ? (
+                                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-blue-400/30 rounded-xl cursor-pointer bg-blue-500/5 hover:bg-blue-500/10 transition-all group">
+                                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                      <FileText className="w-10 h-10 text-blue-400 mb-2 group-hover:scale-110 transition-transform" />
+                                      <p className="text-sm text-slate-300 font-medium">Click para adjuntar archivo</p>
+                                      <p className="text-xs text-slate-500 mt-1">PDF, JPG o PNG (máx. 5MB)</p>
+                                    </div>
+                                    <input
+                                      type="file"
+                                      className="hidden"
+                                      accept=".pdf,.jpg,.jpeg,.png"
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) handleFileUpload('Permiso Circulación', file);
+                                      }}
+                                    />
+                                  </label>
+                                ) : (
+                                  <div className="bg-green-500/10 border-2 border-green-500/30 rounded-xl p-4">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                                        <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                                          <Paperclip className="w-5 h-5 text-green-400" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-sm font-medium text-green-400 truncate">{getDoc('Permiso Circulación').fileName}</p>
+                                          <p className="text-xs text-green-400/60 mt-1">Archivo adjunto correctamente</p>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-2 flex-shrink-0">
+                                        <button
+                                          type="button"
+                                          onClick={() => handlePreviewDocument(getDoc('Permiso Circulación'))}
+                                          className="p-2 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 hover:text-green-300 transition-all"
+                                          title="Vista previa"
+                                        >
+                                          <Eye className="w-5 h-5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDownloadDocument(getDoc('Permiso Circulación'))}
+                                          className="p-2 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 hover:text-green-300 transition-all"
+                                          title="Descargar archivo"
+                                        >
+                                          <Download className="w-5 h-5" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
                       );
                     })()}
+                    </div>
                   </div>
                 </>
               ) : (
-                <>
-                  <Input label="Nombre Completo" value={formData.name} onChange={(e: any) => setFormData({ ...formData, name: e.target.value })} error={errors.name} />
-                  <Input label="RUT (Chile)" value={formData.rut} onChange={(e: any) => setFormData({ ...formData, rut: formatRut(e.target.value) })} error={errors.rut} />
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-400 mb-1.5">Tipo Licencia</label>
-                      <select value={formData.licenseType} onChange={(e) => setFormData({ ...formData, licenseType: e.target.value })} className="w-full bg-dark-950 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-brand-500 outline-none">
-                        <option value="A1">A1</option>
-                        <option value="A4">A4</option>
-                        <option value="A5">A5</option>
-                      </select>
-                    </div>
-                    <div>
-                      <Input label="Vencimiento Licencia" type="date" value={formData.licenseExpiry} onChange={(e: any) => setFormData({ ...formData, licenseExpiry: e.target.value })} error={errors.licenseExpiry} />
-                      <p className="text-xs text-slate-500 mt-1">Fecha en que vence la licencia de conducir</p>
-                    </div>
-                  </div>
-                </>
+                <div className="flex items-center justify-center">
+                  <DriverFormCard
+                    initialData={{
+                      fullName: formData.name || '',
+                      rut: formData.rut || '',
+                      licenseType: formData.licenseType || 'B',
+                      licenseExpiration: formData.licenseExpiry || '',
+                      imageUrl: formData.imageUrl
+                    }}
+                    onSubmit={async (data: DriverFormData) => {
+                      setIsSaving(true);
+                      try {
+                        const driverData = {
+                          id: crypto.randomUUID(),
+                          name: data.fullName,
+                          rut: data.rut,
+                          licenseType: data.licenseType,
+                          licenseExpiry: data.licenseExpiration,
+                          status: (formData.status || 'Available') as DriverStatus
+                        };
+
+                        if (modalMode === 'create') {
+                          const validation = DriverCreateSchema.safeParse(driverData);
+                          if (!validation.success) {
+                            const firstError = validation.error.issues[0];
+                            showToast.error('Error de validación', firstError.message);
+                            setIsSaving(false);
+                            return;
+                          }
+                          const newDriver = await driverService.create(validation.data);
+                          setDrivers([...drivers, newDriver]);
+                          showToast.success(SUCCESS_MESSAGES.DRIVER_CREATED);
+                          window.dispatchEvent(new Event('driver-change'));
+                        } else if (editingId) {
+                          const validation = DriverUpdateSchema.safeParse(driverData);
+                          if (!validation.success) {
+                            const firstError = validation.error.issues[0];
+                            showToast.error('Error de validación', firstError.message);
+                            setIsSaving(false);
+                            return;
+                          }
+                          await driverService.update(editingId, validation.data);
+                          setDrivers(drivers.map(d => d.id === editingId ? { ...d, ...validation.data } : d));
+                          showToast.success(SUCCESS_MESSAGES.DRIVER_UPDATED);
+                          window.dispatchEvent(new Event('driver-change'));
+                        }
+                        setIsModalOpen(false);
+                      } catch (error) {
+                        showToast.error('Error al guardar', error instanceof Error ? error.message : 'Intenta nuevamente');
+                      } finally {
+                        setIsSaving(false);
+                      }
+                    }}
+                    onCancel={() => setIsModalOpen(false)}
+                    className="max-w-2xl"
+                  />
+                </div>
               )}
             </div>
-            <div className="p-6 border-t border-white/5 flex justify-end gap-3">
-              <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-400 hover:text-white transition-colors font-medium">Cancelar</button>
-              <LoadingButton
-                onClick={handleSave}
-                loading={isSaving}
-                loadingText="Guardando..."
-                icon={<Save className="w-4 h-4" />}
-              >
-                Guardar
-              </LoadingButton>
-            </div>
+            {activeTab === 'vehicles' && (
+              <div className="p-6 border-t border-white/5 flex justify-end gap-3">
+                <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-400 hover:text-white transition-colors font-medium">Cancelar</button>
+                <LoadingButton
+                  onClick={handleSave}
+                  loading={isSaving}
+                  loadingText="Guardando..."
+                  icon={<Save className="w-4 h-4" />}
+                >
+                  Guardar
+                </LoadingButton>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -667,6 +1009,53 @@ const FleetManager: React.FC = () => {
           onClose={() => setMaintenanceVehicle(null)}
         />
       )}
+
+      {/* Modal de Preview de Archivo */}
+      {previewFile && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setPreviewFile(null)}>
+          <div className="relative bg-dark-900 border border-white/10 w-full max-w-4xl h-[80vh] rounded-2xl shadow-2xl overflow-hidden animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b border-white/5">
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                <Eye className="w-5 h-5 text-brand-400" />
+                Vista Previa: {previewFile.name}
+              </h3>
+              <button onClick={() => setPreviewFile(null)} className="text-slate-400 hover:text-white transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 h-[calc(100%-80px)] overflow-auto">
+              {previewFile.type.startsWith('image/') ? (
+                <img 
+                  src={previewFile.url} 
+                  alt={previewFile.name}
+                  className="max-w-full h-auto mx-auto rounded-lg border border-white/10"
+                />
+              ) : previewFile.type === 'application/pdf' ? (
+                <iframe
+                  src={previewFile.url}
+                  className="w-full h-full rounded-lg border border-white/10"
+                  title={previewFile.name}
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                  <FileText className="w-16 h-16 mb-4" />
+                  <p>No se puede previsualizar este tipo de archivo</p>
+                  <button
+                    onClick={() => handleDownloadDocument({ url: previewFile.url, fileName: previewFile.name })}
+                    className="mt-4 bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    Descargar
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Dialog */}
+      <ConfirmComponent />
     </div>
   );
 };

@@ -173,20 +173,6 @@ const Dashboard: React.FC = () => {
                      </select>
                      <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" aria-hidden="true" />
                   </div>
-                  <button
-                     onClick={() => {
-                        enableDemoMode(useStore);
-                        loadVehicles();
-                     }}
-                     className="px-4 py-2 bg-purple-600/20 text-purple-400 border border-purple-600/30 rounded-lg text-sm font-medium hover:bg-purple-600/30 transition-colors flex items-center gap-2"
-                     title="Cargar datos de demostración con rutas firmadas"
-                  >
-                     <Sparkles className="w-4 h-4" />
-                     Datos Demo
-                  </button>
-                  <button className="px-4 py-2 bg-brand-600/20 text-brand-400 border border-brand-600/30 rounded-lg text-sm font-medium hover:bg-brand-600/30 transition-colors">
-                     Expor tar Reporte
-                  </button>
                </div>
             </div>
 
@@ -463,49 +449,10 @@ const Dashboard: React.FC = () => {
                )}
             </div>
 
-            {/* Alerts & Map Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-               {/* Smart Alerts Feed */}
-               <div className="lg:col-span-1 flex flex-col gap-6">
-                  <div className="glass-panel border border-white/5 rounded-2xl p-6 animate-slide-in-right h-full">
-                     <div className="flex items-center justify-between mb-6">
-                        <h3 className="text-white font-bold text-sm flex items-center gap-2">
-                           <BellRing className="w-4 h-4 text-accent-500" /> Alertas Inteligentes
-                        </h3>
-                        <span className="text-[10px] bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full font-bold">3 NUEVAS</span>
-                     </div>
-                     <div className="space-y-4">
-                        {smartAlerts.map((alert) => (
-                           <div key={alert.id} className="group relative p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-all border border-white/5 hover:border-white/10">
-                              <div className="flex gap-3">
-                                 <div className={`mt-1 w-2 h-2 rounded-full shrink-0 ${alert.type === 'critical' ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' : alert.type === 'warning' ? 'bg-orange-500' : 'bg-blue-500'}`}></div>
-                                 <div className="flex-1">
-                                    <div className="flex justify-between items-start mb-1">
-                                       <span className={`text-[10px] font-bold uppercase tracking-wider ${alert.type === 'critical' ? 'text-red-400' : alert.type === 'warning' ? 'text-orange-400' : 'text-blue-400'}`}>
-                                          {alert.type === 'critical' ? 'Crítico' : alert.type === 'warning' ? 'Advertencia' : 'Info'}
-                                       </span>
-                                       <span className="text-[10px] text-slate-500 font-mono">{alert.time}</span>
-                                    </div>
-                                    <p className="text-sm text-slate-300 leading-snug">{alert.msg}</p>
-                                 </div>
-                              </div>
-                              <button
-                                 className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-slate-500 hover:text-white transition-opacity focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-white/20 rounded"
-                                 aria-label="Cerrar alerta"
-                              >
-                                 <X className="w-3 h-3" aria-hidden="true" />
-                              </button>
-                           </div>
-                        ))}
-                     </div>
-                     <button className="w-full mt-4 py-2 text-xs text-slate-400 hover:text-white border border-white/5 hover:border-white/10 rounded-lg transition-colors">
-                        Ver todas las alertas
-                     </button>
-                  </div>
-               </div>
-
+            {/* Map Section */}
+            <div className="mb-8">
                {/* Interactive Map with Leaflet - Lazy Loaded */}
-               <div className="lg:col-span-2 glass-panel rounded-2xl border border-white/5 p-1 relative min-h-[400px] overflow-hidden animate-fade-in">
+               <div className="glass-panel rounded-2xl border border-white/5 p-1 relative min-h-[400px] overflow-hidden animate-fade-in">
                   <Suspense fallback={<MapSkeleton />}>
                      {loadingVehicles ? (
                         <MapSkeleton />
