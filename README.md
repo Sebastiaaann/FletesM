@@ -89,6 +89,6 @@ Consulta la sección de solución de problemas en este archivo para resolver err
 - Usa variables de entorno en producción para proteger información sensible.
 
 ## 👤 Autor
-Fletes Marcelo
+Sebastian Almonacid
 
 GitHub: [@Sebastiaaann](https://github.com/Sebastiaaann)
