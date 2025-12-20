@@ -1,13 +1,15 @@
 import React, { Suspense, useEffect } from 'react';
 import { useStore } from '@store/useStore';
 import { useSupabaseRealtime } from '@hooks/useSupabaseRealtime';
-import { useAuth } from '@hooks/useAuth';
+import { useClerkAuth } from '@hooks/useClerkAuth';
 import Navbar from '@components/layout/Navbar';
 import Breadcrumbs from '@components/layout/Breadcrumbs';
 import { ToastProvider, showToast } from '@components/common/Toast';
 import PageLoader from '@components/common/PageLoader';
-import { LoginView } from '@components/auth/LoginView';
+import { ClerkLoginView } from '@components/auth/ClerkLoginView';
 import Unauthorized from '@components/unauthorized/Unauthorized';
+import { DemoBanner } from '@components/demo/DemoBanner';
+import { RequestAccess } from '@components/demo/RequestAccess';
 
 import SkipLink from '@components/common/SkipLink';
 import Hero from '@components/dashboard/Hero';
@@ -29,10 +31,10 @@ import { enableDemoMode } from '@utils/demoData';
 
 const App: React.FC = () => {
   // 1. Hooks Principales
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, isDemoUser } = useClerkAuth();
   const store = useStore();
   const { currentView, setView } = store;
-  
+
   useSupabaseRealtime();
 
   // 1.1. Ref para controlar redirecciones y evitar bucles infinitos
@@ -62,7 +64,7 @@ const App: React.FC = () => {
     // B. Lógica para FLEET MANAGER
     else if (role === 'fleet_manager') {
       const forbiddenViews = [AppView.FINANCIALS, AppView.COMPLIANCE];
-      
+
       if (forbiddenViews.includes(currentView)) {
         if (!isRedirecting.current) {
           isRedirecting.current = true;
@@ -81,12 +83,32 @@ const App: React.FC = () => {
     setView
   ]);
 
+  // 3.1. Demo Mode Restrictions
+  // Vistas permitidas para usuarios demo
+  const DEMO_ALLOWED_VIEWS = [
+    AppView.HOME,
+    AppView.DASHBOARD,
+    AppView.REQUEST_ACCESS,
+    AppView.PRIVACY_POLICY,
+    AppView.TERMS_OF_SERVICE,
+  ];
+
+  useEffect(() => {
+    if (!profile || loading) return;
+
+    if (isDemoUser() && !DEMO_ALLOWED_VIEWS.includes(currentView)) {
+      console.log('🎭 Demo user - Redirecting to Dashboard');
+      showToast.warning('Acceso Limitado', 'Solicita acceso completo para usar esta funcionalidad');
+      setView(AppView.DASHBOARD);
+    }
+  }, [profile?.role, currentView, loading, isDemoUser, setView]);
+
   // 3. Demo Mode (Solo en Desarrollo o entorno seguro)
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
       // Verificamos que no estemos en producción real (opcional, ajusta según tu lógica)
-      const isProd = import.meta.env.PROD; 
-      
+      const isProd = import.meta.env.PROD;
+
       if (!isProd && e.ctrlKey && e.shiftKey && e.key === 'D') {
         e.preventDefault();
         enableDemoMode(useStore);
@@ -111,14 +133,14 @@ const App: React.FC = () => {
     return (
       <div className="antialiased text-slate-200">
         <ToastProvider />
-        <LoginView />
+        <ClerkLoginView />
       </div>
     );
   }
 
   // 5. Render Guard - MODO DESARROLLO: Sin restricciones
   // Todas las vistas están accesibles para todos los usuarios
-  
+
   const renderView = () => {
     switch (currentView) {
       case AppView.HOME:
@@ -139,6 +161,8 @@ const App: React.FC = () => {
         return <Compliance />;
       case AppView.DRIVER_MOBILE:
         return <DriverMobile />;
+      case AppView.REQUEST_ACCESS:
+        return <RequestAccess />;
       case AppView.PRIVACY_POLICY:
         return <PrivacyPolicy />;
       case AppView.TERMS_OF_SERVICE:
@@ -150,19 +174,20 @@ const App: React.FC = () => {
 
   // 6. UI Condicional
   const isDriver = profile?.role === 'driver';
-  
+
   // Ocultar navegación si es driver o si no hay usuario (vista pública)
-  const showNavigation = user && !isDriver; 
+  const showNavigation = user && !isDriver;
 
   return (
     <div className="antialiased text-slate-200 selection:bg-brand-500 selection:text-black font-sans">
       <SkipLink />
       <ToastProvider />
-      
+
       {showNavigation && <Navbar />}
-      
-      <main 
-        id="main-content" 
+      <DemoBanner />
+
+      <main
+        id="main-content"
         className="bg-dark-950"
       >
         <Suspense fallback={<PageLoader />}>

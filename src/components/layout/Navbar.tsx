@@ -6,13 +6,14 @@ import { LayoutDashboard, Truck, Map, PieChart, Zap, FileCheck, Radar, Smartphon
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { useTheme } from '@hooks/useTheme';
-import { useAuth } from '@hooks/useAuth';
+import { useClerkAuth } from '@hooks/useClerkAuth';
+import { UserButton } from '@clerk/clerk-react';
 import { showToast } from '@components/common/Toast';
 
 const Navbar: React.FC = () => {
   const { currentView, setView } = useStore();
   const { theme, toggleTheme } = useTheme();
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, isDemoUser } = useClerkAuth();
   const navRef = useRef<HTMLDivElement>(null);
   const linksRef = useRef<(HTMLButtonElement | null)[]>([]);
   const contactRef = useRef<HTMLDivElement>(null);
@@ -25,15 +26,21 @@ const Navbar: React.FC = () => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  const navItems = [
-    { id: AppView.DASHBOARD, label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
-    { id: AppView.FLEET, label: 'Equipo', icon: <Truck className="w-5 h-5" /> },
-    { id: AppView.ROUTES, label: 'Rutas', icon: <Map className="w-5 h-5" /> },
-    { id: AppView.ROUTE_BUILDER, label: 'Constructor', icon: <Zap className="w-5 h-5" /> },
-    { id: AppView.FINANCIALS, label: 'Finanzas', icon: <PieChart className="w-5 h-5" /> },
-    { id: AppView.COMPLIANCE, label: 'Cumplimiento', icon: <FileCheck className="w-5 h-5" /> },
-    { id: AppView.DRIVER_MOBILE, label: 'App Conductor', icon: <Smartphone className="w-5 h-5" /> },
+  // Todos los items de navegación
+  const allNavItems = [
+    { id: AppView.DASHBOARD, label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, roles: ['admin', 'fleet_manager', 'driver', 'demo'] },
+    { id: AppView.FLEET, label: 'Equipo', icon: <Truck className="w-5 h-5" />, roles: ['admin', 'fleet_manager'] },
+    { id: AppView.ROUTES, label: 'Rutas', icon: <Map className="w-5 h-5" />, roles: ['admin', 'fleet_manager'] },
+    { id: AppView.ROUTE_BUILDER, label: 'Constructor', icon: <Zap className="w-5 h-5" />, roles: ['admin', 'fleet_manager'] },
+    { id: AppView.FINANCIALS, label: 'Finanzas', icon: <PieChart className="w-5 h-5" />, roles: ['admin'] },
+    { id: AppView.COMPLIANCE, label: 'Cumplimiento', icon: <FileCheck className="w-5 h-5" />, roles: ['admin'] },
+    { id: AppView.DRIVER_MOBILE, label: 'App Conductor', icon: <Smartphone className="w-5 h-5" />, roles: ['admin', 'driver'] },
   ];
+
+  // Filtrar items según el rol del usuario
+  const navItems = allNavItems.filter(item =>
+    item.roles.includes(profile?.role || 'demo')
+  );
 
   const toggleMenu = () => {
     if (!tl.current || !iconTL.current) return;
@@ -194,9 +201,9 @@ const Navbar: React.FC = () => {
               <div className="relative w-9 h-9 flex items-center justify-center">
                 <div className="absolute inset-0 bg-brand-500/20 rounded-lg blur-md group-hover:blur-lg transition-all"></div>
                 <div className="relative w-full h-full bg-white/10 rounded-lg flex items-center justify-center p-1.5">
-                  <img 
-                    src="/logoFTSR.svg" 
-                    alt="FleetTech" 
+                  <img
+                    src="/logoFTSR.svg"
+                    alt="FleetTech"
                     className="w-full h-full filter brightness-0 invert"
                   />
                 </div>
@@ -228,77 +235,31 @@ const Navbar: React.FC = () => {
               </div>
             </div>
 
-            {/* User Profile Dropdown - Desktop */}
-            <div className="hidden lg:block relative" ref={userMenuRef}>
-              <button
-                onClick={() => setShowUserMenu(!showUserMenu)}
-                className="ripple flex items-center gap-2.5 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-all duration-300 border border-white/10 hover:border-white/20 hover:shadow-glow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-                aria-label="Menú de usuario"
-                aria-expanded={showUserMenu}
-              >
-                {/* Avatar */}
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-brand-500/20">
-                  {getUserInitial(profile?.full_name)}
-                </div>
-                {/* User Info */}
-                <div className="flex flex-col items-start min-w-0">
-                  <span className="text-sm font-semibold text-white truncate max-w-[120px]">
-                    {profile?.full_name || 'Usuario'}
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-medium">
-                    {formatRole(profile?.role)}
-                  </span>
-                </div>
-                {/* Dropdown indicator */}
-                <svg
-                  className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${showUserMenu ? 'rotate-180' : ''
-                    }`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
+            {/* User Profile - Clerk UserButton */}
+            <div className="hidden lg:flex items-center gap-3">
+              {/* User Info Display */}
+              <div className="flex flex-col items-end">
+                <span className="text-sm font-semibold text-white">
+                  {profile?.full_name || 'Usuario'}
+                </span>
+                <span className="text-[10px] text-slate-400 font-medium">
+                  {formatRole(profile?.role)}
+                </span>
+              </div>
 
-              {/* Dropdown Menu */}
-              {showUserMenu && (
-                <div className="absolute right-0 mt-2 w-56 bg-dark-800/95 backdrop-blur-xl border border-white/20 rounded-xl shadow-2xl shadow-black/50 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                  {/* Menu Items */}
-                  <div className="py-1.5">
-                    {/* Theme Toggle */}
-                    <button
-                      onClick={() => {
-                        toggleTheme();
-                        setShowUserMenu(false);
-                      }}
-                      className="ripple w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-all duration-200"
-                    >
-                      {theme === 'dark' ? (
-                        <Sun className="w-4 h-4 text-yellow-400" />
-                      ) : (
-                        <Moon className="w-4 h-4 text-blue-400" />
-                      )}
-                      <span className="font-medium">Cambiar tema</span>
-                    </button>
-
-                    {/* Divider */}
-                    <div className="my-1.5 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
-
-                    {/* Logout */}
-                    <button
-                      onClick={() => {
-                        setShowUserMenu(false);
-                        handleLogout();
-                      }}
-                      className="ripple w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-all duration-200 font-medium"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      <span>Cerrar Sesión</span>
-                    </button>
-                  </div>
-                </div>
-              )}
+              {/* Clerk UserButton */}
+              <UserButton
+                afterSignOutUrl="/"
+                appearance={{
+                  elements: {
+                    avatarBox: "w-10 h-10 rounded-full shadow-lg shadow-brand-500/20 border-2 border-brand-500/30",
+                    userButtonPopoverCard: "bg-dark-800/95 backdrop-blur-xl border border-white/20 shadow-2xl",
+                    userButtonPopoverActionButton: "hover:bg-white/10 text-slate-300 hover:text-white",
+                    userButtonPopoverActionButtonText: "text-sm font-medium",
+                    userButtonPopoverActionButtonIcon: "text-slate-400",
+                  }
+                }}
+              />
             </div>
           </div>
         </div>

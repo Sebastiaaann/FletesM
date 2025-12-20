@@ -10,7 +10,7 @@ import { User, Session, AuthError } from '@supabase/supabase-js';
 /**
  * Roles de la aplicación (debe coincidir con el enum de PostgreSQL)
  */
-export type AppRole = 'admin' | 'fleet_manager' | 'driver';
+export type AppRole = 'admin' | 'fleet_manager' | 'driver' | 'demo';
 
 /**
  * Perfil de usuario extendido
@@ -57,7 +57,7 @@ export interface SignUpCredentials {
  */
 export interface AuthResponse {
   // CORRECCIÓN: Usar AuthError para acceder a propiedades como 'status' o 'code'
-  error: AuthError | null; 
+  error: AuthError | null;
   data?: {
     user: User | null;
     session: Session | null;
@@ -78,7 +78,7 @@ export interface AuthContextType {
   signInWithEmail: (email: string, password: string) => Promise<AuthResponse>;
   signUpWithEmail: (credentials: SignUpCredentials) => Promise<AuthResponse>;
   signOut: () => Promise<{ error: AuthError | null }>;
-  
+
   // Helpers
   isAuthenticated: boolean;
   hasRole: (role: AppRole | AppRole[]) => boolean;
@@ -113,6 +113,9 @@ export const ROLE_PERMISSIONS = {
     'upload_pod',
     'view_own_profile',
   ],
+  demo: [
+    'view_dashboard', // Solo puede ver el dashboard
+  ],
 } as const;
 
 /**
@@ -125,7 +128,7 @@ export type PermissionType = typeof ROLE_PERMISSIONS[AppRole][number];
  * Type guard para verificar si un string es un AppRole válido
  */
 export const isValidAppRole = (role: string): role is AppRole => {
-  return ['admin', 'fleet_manager', 'driver'].includes(role);
+  return ['admin', 'fleet_manager', 'driver', 'demo'].includes(role);
 };
 
 /**
@@ -135,4 +138,5 @@ export const ROLE_LABELS: Record<AppRole, string> = {
   admin: 'Administrador',
   fleet_manager: 'Gestor de Flota',
   driver: 'Conductor',
+  demo: 'Usuario Demo',
 };
